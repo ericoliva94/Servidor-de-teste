@@ -107,6 +107,7 @@ type Server struct {
 	MySQLPassword string
 
 	LoginAddr   string
+	ChannelAddr string
 	TokenAddr   string
 	ConsoleAddr string
 }
@@ -114,6 +115,7 @@ type Server struct {
 // Portas padrao, iguais as do Delphi (ver ALTERACOES.md).
 const (
 	DefaultLoginPort   = 8831
+	DefaultChannelPort = 8822
 	DefaultTokenPort   = 8090
 	DefaultConsolePort = 5555
 )
@@ -147,6 +149,7 @@ func FromINI(ini *INI) Server {
 		MySQLPassword: ini.String("MySQL", "Password", ""),
 
 		LoginAddr:   fmt.Sprintf(":%d", DefaultLoginPort),
+		ChannelAddr: fmt.Sprintf(":%d", DefaultChannelPort),
 		TokenAddr:   fmt.Sprintf(":%d", DefaultTokenPort),
 		ConsoleAddr: fmt.Sprintf("127.0.0.1:%d", DefaultConsolePort),
 	}

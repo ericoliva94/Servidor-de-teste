@@ -20,6 +20,7 @@ import (
 
 	"aika/internal/auth"
 	"aika/internal/config"
+	"aika/internal/game"
 	"aika/internal/gamedata"
 	"aika/internal/netsrv"
 	"aika/internal/store"
@@ -70,10 +71,14 @@ func run() error {
 		os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	var accounts auth.Accounts
+	var (
+		accounts auth.Accounts
+		chars    game.Characters
+	)
 	if *skipDB {
 		log.Warn("subindo sem banco: nenhum login sera aceito")
 		accounts = noAccounts{}
+		chars = noChars{}
 	} else {
 		db, err := store.Open(ctx, store.Config{
 			Server:   cfg.MySQLServer,
@@ -90,6 +95,7 @@ func run() error {
 		log.Info("mysql conectado",
 			"servidor", cfg.MySQLServer, "porta", cfg.MySQLPort, "banco", cfg.MySQLDatabase)
 		accounts = store.Accounts{DB: db}
+		chars = store.Characters{DB: db}
 	}
 
 	loginSrv := netsrv.New(netsrv.Config{
@@ -99,19 +105,57 @@ func run() error {
 		Log:      log,
 	}, &auth.Handler{Accounts: accounts})
 
-	// Abre a porta antes de anunciar: o original so descobria falha de bind
-	// pelo log, depois de dizer que havia iniciado.
-	if err := loginSrv.Listen(); err != nil {
-		return err
-	}
-	log.Info("servidor de login pronto", "endereco", loginSrv.Addr().String())
+	channelSrv := netsrv.New(netsrv.Config{
+		Name:     "canal",
+		Addr:     cfg.ChannelAddr,
+		MaxConns: int(cfg.MaxUsers),
+		Log:      log,
+	}, &game.Handler{
+		Channel:       0,
+		Accounts:      accounts,
+		Chars:         chars,
+		Log:           log,
+		ServerVersion: uint16(cfg.Version),
+	})
 
-	err = loginSrv.Serve(ctx)
-	log.Info("servidor encerrado")
-	if err != nil && !errors.Is(err, context.Canceled) {
-		return err
+	// Abre as portas antes de anunciar: o original so descobria falha de bind
+	// pelo log, depois de dizer que havia iniciado.
+	for _, srv := range []*netsrv.Server{loginSrv, channelSrv} {
+		if err := srv.Listen(); err != nil {
+			return err
+		}
 	}
-	return nil
+	log.Info("servidor pronto",
+		"login", loginSrv.Addr().String(),
+		"canal", channelSrv.Addr().String())
+
+	// Um erro em qualquer uma das portas encerra as duas.
+	errc := make(chan error, 2)
+	ctx, cancelAll := context.WithCancel(ctx)
+	defer cancelAll()
+	for _, srv := range []*netsrv.Server{loginSrv, channelSrv} {
+		go func(s *netsrv.Server) { errc <- s.Serve(ctx) }(srv)
+	}
+
+	var firstErr error
+	for range 2 {
+		if err := <-errc; err != nil && !errors.Is(err, context.Canceled) {
+			if firstErr == nil {
+				firstErr = err
+			}
+			cancelAll()
+		}
+	}
+	log.Info("servidor encerrado")
+	return firstErr
+}
+
+// noChars devolve lista vazia. Usado com -no-db.
+type noChars struct{}
+
+func (noChars) ByAccount(context.Context, uint32) ([store.MaxCharacterSlots]store.Character, []string, error) {
+	var zero [store.MaxCharacterSlots]store.Character
+	return zero, nil, nil
 }
 
 // noAccounts recusa todo login. Usado com -no-db.

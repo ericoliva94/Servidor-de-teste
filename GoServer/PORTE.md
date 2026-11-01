@@ -15,9 +15,12 @@ go run ./cmd/aikaserver -ini ../Server/Bin/AikaServer.ini   # sobe o login
 go run ./cmd/aikaserver -no-db                    # sobe sem banco, so para ver a carga
 ```
 
-O servidor abre a porta 8831, carrega as 16 tabelas `.bin` de
-`Server/Bin/Data` e atende o pacote `$81` validando o token contra a tabela
-`accounts`. As demais portas entram na fase 10b.
+O servidor abre as portas **8831** (login) e **8822** (canal), carrega as 16
+tabelas `.bin` de `Server/Bin/Data` e atende:
+
+- `$81` no login: valida o token contra `accounts` e responde `$82`.
+- `$685` no canal: valida conta e token, lê os 3 personagens de `characters`
+  e responde a lista em `$901`.
 
 ## Regras do porte
 
@@ -58,7 +61,8 @@ de evidências.
 | 8 | Sistemas | itens/refino, dungeon, guild, party, mail, auction, nation, eventos, ranked | a fazer |
 | 9 | Laços de atualização | `UpdateThreads.pas` (3.942) | a fazer |
 | 10a | Servidor TCP, login e `main` que sobe | `LoginSocket.pas`, `AuthHandlers.pas` | **pronto** |
-| 10b | Canais, token HTTP, console | `ServerSocket.pas`, `TokenSocket.pas`, `ConsoleSocket.pas` | a fazer |
+| 10b | Canal 8822: `CheckLogin` e lista de personagens | `ServerSocket.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** |
+| 10c | Token HTTP, console, entrada no mundo | `TokenSocket.pas`, `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -179,6 +183,10 @@ descontado três vezes do golpe (300 − 30 − 30 − 30 = 210).
 
 **A posição 0 da roleta de dano nunca sai.** `RandomRange(1, total+1)` sorteia
 em `[1, total]`, embora a posição 0 seja pintada pela primeira chance.
+
+**Nível do personagem vai como `Level - 1` na lista.** `SendCharList` manda
+`Account.Characters[i].Base.Level - 1`. Num slot vazio (`Level = 0`) isso
+estoura o `WORD` e vira 65535; o porte usa piso zero, que é a única diferença.
 
 **A amplificação usa divisão inteira.** `(Dano div 100) * pct`, então 25% de
 1250 dá 120 e não 125.

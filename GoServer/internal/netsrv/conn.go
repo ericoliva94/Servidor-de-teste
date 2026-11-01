@@ -2,6 +2,7 @@ package netsrv
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -99,8 +100,16 @@ func Marshal(code uint16, v any) ([]byte, error) {
 	return buf, nil
 }
 
+// ErrNoSocket indica Conn sem socket associado.
+var ErrNoSocket = errors.New("netsrv: conexao sem socket")
+
 // sendRaw escreve bytes ja cifrados, com trava por conexao.
 func (c *Conn) sendRaw(buf []byte) error {
+	if c == nil || c.nc == nil {
+		// Conn de valor zero (em teste, ou depois de a conexao ser recolhida)
+		// nao pode entrar em panico no envio.
+		return ErrNoSocket
+	}
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 
