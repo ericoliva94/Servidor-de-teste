@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectSession>
+    <PathDelim Value="\"/>
+    <Version Value="12"/>
+    <BuildModes Active="Default"/>
+    <Units>
+      <Unit>
+        <Filename Value="AikaServer.lpr"/>
+        <IsPartOfProject Value="True"/>
+        <CursorPos X="12" Y="13"/>
+        <UsageCount Value="20"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="Src\Functions\Log.pas"/>
+        <EditorIndex Value="1"/>
+        <CursorPos X="63" Y="20"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <EditorIndex Value="2"/>
+        <TopLine Value="6"/>
+        <CursorPos X="32" Y="21"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="Src\Party\PartyData.pas"/>
+        <EditorIndex Value="3"/>
+        <TopLine Value="33"/>
+        <CursorPos Y="49"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="Src\Data\MiscData.pas"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="4"/>
+        <TopLine Value="355"/>
+        <CursorPos Y="370"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
+      </Unit>
+    </Units>
+    <JumpHistory HistoryIndex="29">
+      <Position>
+        <Filename Value="Src\Functions\Log.pas"/>
+        <Caret Line="20" Column="63"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="7" Column="76"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="5" Column="61"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="20" Column="30" TopLine="4"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="21" Column="7" TopLine="5"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="47" Column="30" TopLine="32"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="21" Column="7" TopLine="6"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="18" Column="62" TopLine="10"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="20" TopLine="4"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="48" Column="30" TopLine="33"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="22" Column="53" TopLine="5"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="20" Column="40" TopLine="4"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="27" Column="40" TopLine="4"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="4"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="5" Column="61" TopLine="16"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="20" Column="30" TopLine="4"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="21" Column="7" TopLine="5"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="47" Column="30" TopLine="32"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="48" Column="7" TopLine="33"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="42" Column="66" TopLine="30"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Threads\PlayerThread.pas"/>
+        <Caret Line="21" Column="32" TopLine="6"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Party\PartyData.pas"/>
+        <Caret Line="14" Column="19"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Party\PartyData.pas"/>
+        <Caret Line="25" Column="45"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Data\MiscData.pas"/>
+        <Caret Line="4" Column="6"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Data\MiscData.pas"/>
+        <Caret Line="9"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Data\MiscData.pas"/>
+        <Caret Line="116" Column="57" TopLine="101"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Data\MiscData.pas"/>
+        <Caret Line="358" Column="29" TopLine="343"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Party\PartyData.pas"/>
+        <Caret Line="49" TopLine="33"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Data\MiscData.pas"/>
+        <Caret Line="116" Column="57" TopLine="101"/>
+      </Position>
+      <Position>
+        <Filename Value="Src\Data\MiscData.pas"/>
+        <Caret Line="358" Column="29" TopLine="343"/>
+      </Position>
+    </JumpHistory>
+    <RunParams>
+      <FormatVersion Value="2"/>
+      <Modes ActiveMode="default">
+        <Mode Name="default"/>
+      </Modes>
+    </RunParams>
+    <HistoryLists>
+      <List Name="WorkingDirectory" Type="File" Count="1"/>
+      <List Name="LaunchingApplication" Type="File" Count="1">
+        <Item1 Value="C:\Windows\System32\cmd.exe /C ${TargetCmdLine}"/>
+      </List>
+      <List Name="CommandLineParameters" Count="1"/>
+    </HistoryLists>
+  </ProjectSession>
+  <Debugging>
+    <BreakPoints>
+      <Item>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="AikaServer.lpr"/>
+        <Line Value="4"/>
+      </Item>
+    </BreakPoints>
+  </Debugging>
+</CONFIG>

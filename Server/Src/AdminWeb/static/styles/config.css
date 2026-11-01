@@ -1,0 +1,45 @@
+/* ======================================================
+   CONFIG.CSS - Ajustes VISUAIS ESPECÍFICOS da página config
+   (herda dashboard.css para cores, botões, input, etc.)
+   ====================================================== */
+
+/* Garante que o conteúdo das abas fique organizado */
+.tab-content {
+  display: none;
+  padding-top: 16px;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* Agrupamento dos itens de configuração (campos) */
+.config-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.config-item {
+  flex: 1 1 calc(33% - 16px);
+  min-width: 260px;
+}
+
+.config-item label {
+  display: block;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+/* Para garantir que o input siga o estilo corretamente */
+.config-item .input {
+  width: 100%;
+}
+
+/* Botão de salvar com um leve espaçamento */
+.save-btn,
+.btn.btn-ok {
+  margin-top: 20px;
+}

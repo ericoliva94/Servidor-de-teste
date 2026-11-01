@@ -1,0 +1,61 @@
+Perfeito.
+Vou criar um relatório simples, direto, sem enrolação, para você colar em TXT / bloco de notas e usar sempre que o bug aparecer.
+
+✅ RELATÓRIO DE CORREÇÃO – BUG DAS RELÍQUIAS (slotX_timecap)
+Sintoma
+
+Ao entregar uma relíquia, o servidor retorna erros como:
+
+Data truncated for column 'slot1_timecap'
+Incorrect decimal value
+
+
+Relíquias não aparecem ou aparecem “fantasmas”
+
+SaveTemplesDB roda, mas os valores não salvam corretamente
+
+Causa
+
+A coluna slotX_timecap deve armazenar timestamp UNIX (BIGINT).
+Mas alguns bancos vêm com valores errados, como:
+
+1
+
+2
+
+1899
+
+12/30/1899 1:00:00 AM (formato de Delphi)
+
+NULL
+
+Qualquer valor menor que 1.000.000.000 é considerado inválido.
+
+✅ Correção (sempre que o erro ocorrer)
+
+Abra o MySQL e execute:
+
+UPDATE devires
+SET 
+    slot1_timecap = IF(slot1_timecap < 1000000000, 0, slot1_timecap),
+    slot2_timecap = IF(slot2_timecap < 1000000000, 0, slot2_timecap),
+    slot3_timecap = IF(slot3_timecap < 1000000000, 0, slot3_timecap),
+    slot4_timecap = IF(slot4_timecap < 1000000000, 0, slot4_timecap),
+    slot5_timecap = IF(slot5_timecap < 1000000000, 0, slot5_timecap);
+
+✅ E garanta que os tipos estão corretos:
+ALTER TABLE devires 
+MODIFY slot1_timecap BIGINT NOT NULL DEFAULT 0,
+MODIFY slot2_timecap BIGINT NOT NULL DEFAULT 0,
+MODIFY slot3_timecap BIGINT NOT NULL DEFAULT 0,
+MODIFY slot4_timecap BIGINT NOT NULL DEFAULT 0,
+MODIFY slot5_timecap BIGINT NOT NULL DEFAULT 0;
+
+✅ Depois disso, reinicie o servidor
+
+Não precisa recompilar nada.
+Os Devires serão lidos corretamente.
+
+🧠 Dica Final (Para Evitar Novamente)
+
+Sempre que importar ou substituir um banco novo → rode o UPDATE acima antes de ligar o servidor.

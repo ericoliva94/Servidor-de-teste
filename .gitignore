@@ -1,0 +1,38 @@
+# ---- Senhas, tokens e chaves (ficam so no PC; use os .example) ----
+Server/Bin/AikaServer.ini
+Server/Bin/AikaServer_remote.ini
+Server/Bin/config.ini
+*.ini.orig
+Server/Bin/WebPainel/.env
+*.pem
+
+# ---- Logs ----
+Logs/
+*.log
+
+# ---- Arquivos grandes demais / gerados ----
+# dump de texto de 227 MB (GitHub recusa arquivos > 100 MB)
+Server/Bin/PacotesItemList.bin.txt
+# simbolos de debug remoto do Delphi
+*.rsm
+
+# ---- Saida de compilacao e historico do Delphi ----
+Server/Win64/
+Server/Win32/
+Server/DCUs/
+Server/DCUs64/
+Server/lib/
+*.dcu
+__history/
+__recovery/
+*.~*~
+*.identcache
+*.dproj.local
+*.stat
+
+# ---- Outros ----
+Scripts/.build/
+__pycache__/
+node_modules/
+*.lnk
+desktop.ini

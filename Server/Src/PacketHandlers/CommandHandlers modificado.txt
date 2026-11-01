@@ -1,0 +1,1167 @@
+unit CommandHandlers;
+
+interface
+
+uses
+  Player, Classes, StrUtils, SysUtils, Log, MiscData, ServerSocket;
+
+
+type
+  TCommandHandlers = class(TObject)
+  public
+    class procedure ProcessCommands(var Player: TPlayer; Command: string;
+      Parameter: string);
+  private
+    class procedure AddItem(var Player: TPlayer; Data: TStringList);
+    class procedure EquipItem(var Player: TPlayer; Data: TStringList);
+    class procedure MoveItem(var Player: TPlayer; Data: TStringList);
+
+    class procedure AddLevel(var Player: TPlayer; Data: TStringList);
+    class procedure AddGold(var Player: TPlayer; Data: TStringList);
+    class procedure AddExp(var Player: TPlayer; Data: TStringList);
+    class procedure AddCash(var Player: TPlayer; Data: TStringList);
+
+    class procedure AddBuff(var Player: TPlayer; Data: TStringList);
+    class procedure RemoveBuff(var Player: TPlayer; Data: TStringList);
+
+    class procedure SetRank(var Player: TPlayer; Data: TStringList);
+
+    class procedure MovePlayer(var Player: TPlayer; Data: TStringList);
+    class procedure WalkTo(var Player: TPlayer; Data: TStringList);
+
+    class procedure Disconnect(var Player: TPlayer; Parameter: string);
+    class procedure SetDnType(Parameter: string);
+
+    class procedure Demage(var Player: TPlayer; Data: TStringList);
+
+    class procedure AddMob(var Player: TPlayer; Data: TStringList);
+
+    class procedure AddEff(var Player: TPlayer; Data: TStringList);
+    class procedure RemoveEff(var Player: TPlayer; Data: TStringList);
+
+    class procedure AddGuildExp(var Player: TPlayer; Data: TStringList);
+
+    class procedure AddTitle(var Player: TPlayer; Data: TStringList);
+    class procedure UpdateTitle(var Player: TPlayer; Data: TStringList);
+    class procedure RemoveTitle(var Player: TPlayer; Data: TStringList);
+
+    class procedure SendChat(var Player: TPlayer; Data: TStringList);
+    class procedure AddItemApp(var Player: TPlayer; Data: TStringList);
+    class procedure ResPlayer(var Player: TPlayer; Data: TStringList);
+
+    class procedure ViewInventory(var Player: TPlayer; Data: TStringList);
+    class procedure ViewEquip(var Player: TPlayer; Data: TStringList);
+    class procedure ViewUndo(var Player: TPlayer; Data: TStringList);
+    class function  FindOnlinePlayerByName(Channel: Byte; const Nick: string; out Target: PPlayer): Boolean;
+
+
+  end;
+
+implementation
+
+uses
+  GlobalDefs, ItemFunctions, PlayerData, BaseMob, Windows;
+
+
+{$REGION 'GM move item'}
+
+
+class procedure TCommandHandlers.ProcessCommands(
+  var Player: TPlayer; Command, Parameter: string);
+var
+  CMD: TStringList;
+  i: Integer;
+begin
+  // normaliza
+  Command := LowerCase(ReplaceStr(Trim(Command), '/', ''));
+
+  CMD := TStringList.Create;
+  try
+    CMD.Delimiter := ' ';
+    CMD.DelimitedText := Trim(Parameter);
+
+    // ======== VISUALIZAÇÃO (executa e SAI) ========
+    if Command = 'inv' then
+    begin
+      ViewInventory(Player, CMD);
+      Exit;
+    end;
+
+    if Command = 'equip' then
+    begin
+      ViewEquip(Player, CMD);
+      Exit;
+    end;
+
+
+    if Command = 'undo' then
+    begin
+      ViewUndo(Player, CMD);
+      Exit;
+    end;
+
+    // ======== MENSAGENS GM (executa e SAI) ========
+    if Command = 'msg' then
+    begin
+      Servers[Player.ChannelIndex].SendServerMsg(
+        AnsiString('[' + Player.Base.Character.Name + '] ' + ShortString(Parameter)), 32, 16);
+      Exit;
+    end;
+
+    if Command = 'msgall' then
+    begin
+      for i := Low(Servers) to High(Servers) do
+      begin
+        if not Servers[i].IsActive then Continue;
+        Servers[i].SendServerMsg(
+          AnsiString('[' + Player.Base.Character.Name + '] ' + ShortString(Parameter)), 32, 16);
+      end;
+      Exit;
+    end;
+
+    // ======== DEMAIS COMANDOS ========
+    // IMPORTANTE: remova 'equip' da lista abaixo
+    case AnsiIndexStr(Command, [
+      'additem','addexp','addgold','addcash','addbuff','addlevel',
+      'move','walkto','dc','setdntype','setrank','removebuff',
+      'dmg','addmob','addeff','removeeff','moveitem',
+      'addguildexp','addtitle','updatetitle','removetitle','resplayer'
+    ]) of
+      0:  Self.AddItem(Player, CMD);
+      1:  Self.AddExp(Player, CMD);
+      2:  Self.AddGold(Player, CMD);
+      3:  Self.AddCash(Player, CMD);
+      4:  Self.AddBuff(Player, CMD);
+      5:  Self.AddLevel(Player, CMD);
+      6:  Self.MovePlayer(Player, CMD);
+      7:  Self.WalkTo(Player, CMD);
+      8:  Self.Disconnect(Player, CMD[0]);
+      9:  Self.SetDnType(CMD[0]);
+      10: Self.SetRank(Player, CMD);
+      11: Self.RemoveBuff(Player, CMD);
+      12: Self.Demage(Player, CMD);
+      13: Self.AddMob(Player, CMD);
+      14: Self.AddEff(Player, CMD);
+      15: Self.RemoveEff(Player, CMD);
+      16: Self.MoveItem(Player, CMD);
+      17: Self.AddGuildExp(Player, CMD);
+      18: Self.AddTitle(Player, CMD);
+      19: Self.UpdateTitle(Player, CMD);
+      20: Self.RemoveTitle(Player, CMD);
+      21: Self.ResPlayer(Player, CMD);
+    else
+      Player.SendClientMessage('Comando inválido.');
+    end;
+
+  finally
+    CMD.Free;
+  end;
+
+
+
+
+{$ENDREGION}
+{$REGION 'Outros Commandos'}
+  case AnsiIndexStr(Command, ['additem', 'equip', 'addexp', 'addgold',
+    'addcash', 'addbuff', 'addlevel', 'move', 'walkto', 'dc', 'setdntype',
+    'setrank', 'removebuff', 'dmg', 'addmob', 'addeff', 'removeeff', 'moveitem',
+    'addguildexp', 'addtitle', 'updatetitle', 'removetitle', 'resplayer']) of
+    0:
+      Self.AddItem(Player, CMD);
+    1:
+      Self.EquipItem(Player, CMD);
+    2:
+      Self.AddExp(Player, CMD);
+    3:
+      Self.AddGold(Player, CMD);
+    4:
+      Self.AddCash(Player, CMD);
+    5:
+      Self.AddBuff(Player, CMD);
+    6:
+      Self.AddLevel(Player, CMD);
+    7:
+      Self.MovePlayer(Player, CMD);
+    8:
+      Self.WalkTo(Player, CMD);
+    9:
+      Self.Disconnect(Player, CMD[0]);
+    10:
+      Self.SetDnType(CMD[0]);
+    11:
+      Self.SetRank(Player, CMD);
+    12:
+      Self.RemoveBuff(Player, CMD);
+    13:
+      Self.Demage(Player, CMD);
+    14:
+      Self.AddMob(Player, CMD);
+    15:
+      Self.AddEff(Player, CMD);
+    16:
+      Self.RemoveEff(Player, CMD);
+    17:
+      Self.MoveItem(Player, CMD);
+    18:
+      Self.AddGuildExp(Player, CMD);
+
+    19:
+      Self.AddTitle(Player, CMD);
+    20:
+      Self.UpdateTitle(Player, CMD);
+    21:
+      Self.RemoveTitle(Player, CMD);
+    22:
+      Self.ResPlayer(Player, CMD);
+
+  else
+    begin
+      Player.SendClientMessage('Comando inválido.');
+    end;
+
+  end;
+
+{$ENDREGION}
+end;
+
+function JoinStrings(Data: TStringList; Delimiter: string): string;
+var
+  i: Integer;
+  resultString: string;  // Renomeando a variável para não conflitar com 'result'
+
+begin
+  resultString := '';
+  for i := 0 to Data.Count - 1 do
+  begin
+    if i > 0 then
+      resultString := resultString + Delimiter;
+    resultString := resultString + Data[i];
+  end;
+  JoinStrings := resultString;  // Retorna a variável renomeada
+end;
+
+{$REGION 'Res Player'}
+
+
+
+// ---------------------------------------------------------------------------
+// GM: Encontrar jogador online pelo nome
+// ---------------------------------------------------------------------------
+class function TCommandHandlers.FindOnlinePlayerByName(Channel: Byte; const Nick: string; out Target: PPlayer): Boolean;
+var
+  i: Integer;
+  P: PPlayer;
+  S: string;
+begin
+  Result := False;
+  Target := nil;
+
+  for i := Low(Servers[Channel].Players) to High(Servers[Channel].Players) do
+  begin
+    P := @Servers[Channel].Players[i];
+    if (P^.Base.ClientId = 0) then
+      Continue;
+
+    S := String(P^.Character.Base.Name);
+    if (S <> '') and SameText(S, Nick) then
+    begin
+      Target := P;
+      Exit(True);
+    end;
+  end;
+end;
+
+// ---------------------------------------------------------------------------
+// /inv NICK
+// ---------------------------------------------------------------------------
+class procedure TCommandHandlers.ViewInventory(var Player: TPlayer; Data: TStringList);
+var
+  Nick: string;
+  Target: PPlayer;
+begin
+  if Data.Count < 1 then
+  begin
+    Player.SendClientMessage('Uso: /inv NICK');
+    Exit;
+  end;
+
+  Nick := Trim(Data[0]);
+
+  // ==== SE NICK É O SEU → RESTAURA ====
+  if SameText(Nick, String(Player.Base.Character.Name)) then
+  begin
+    if not Player.BackupHasData then
+    begin
+      Player.SendClientMessage('Nenhum inventário para restaurar.');
+      Exit;
+    end;
+
+    Move(Player.BackupInventory, Player.Base.Character.Inventory, SizeOf(Player.BackupInventory));
+    Move(Player.BackupEquip,     Player.Base.Character.Equip,     SizeOf(Player.BackupEquip));
+    Move(Player.BackupItemBar,   Player.Base.Character.ItemBar,   SizeOf(Player.BackupItemBar));
+    Player.BackupHasData := False;
+
+    Player.SendToWorld(Player.SelectedCharacterIndex, False);
+    Player.SendClientMessage('Inventário restaurado com sucesso.');
+    Exit;
+  end;
+
+  // ==== EXIBIR OUTRO JOGADOR ====
+  if not FindOnlinePlayerByName(Player.ChannelIndex, Nick, Target) then
+  begin
+    Player.SendClientMessage('Jogador não encontrado: ' + AnsiString(Nick));
+    Exit;
+  end;
+
+  if not Player.BackupHasData then
+  begin
+    Move(Player.Base.Character.Inventory, Player.BackupInventory, SizeOf(Player.BackupInventory));
+    Move(Player.Base.Character.Equip,     Player.BackupEquip,     SizeOf(Player.BackupEquip));
+    Move(Player.Base.Character.ItemBar,   Player.BackupItemBar,   SizeOf(Player.BackupItemBar));
+    Player.BackupHasData := True;
+  end;
+
+  Move(Target^.Base.Character.Inventory, Player.Base.Character.Inventory, SizeOf(Player.Base.Character.Inventory));
+  Move(Target^.Base.Character.ItemBar,   Player.Base.Character.ItemBar,   SizeOf(Player.Base.Character.ItemBar));
+
+  Player.SendToWorld(Player.SelectedCharacterIndex, False);
+  Player.SendClientMessage('Inventário de ' + AnsiString(Nick) + ' exibido.');
+end;
+
+// ---------------------------------------------------------------------------
+// /equip NICK
+// ---------------------------------------------------------------------------
+class procedure TCommandHandlers.ViewEquip(var Player: TPlayer; Data: TStringList);
+var
+  Nick: string;
+  Target: PPlayer;
+begin
+  if Data.Count < 1 then
+  begin
+    Player.SendClientMessage('Uso: /equip NICK');
+    Exit;
+  end;
+
+  Nick := Trim(Data[0]);
+
+  // ==== RESTAURA SE FOR O SEU NICK ====
+  if SameText(Nick, String(Player.Base.Character.Name)) then
+  begin
+    if not Player.BackupHasData then
+    begin
+      Player.SendClientMessage('Nenhum equipamento para restaurar.');
+      Exit;
+    end;
+
+    Move(Player.BackupInventory, Player.Base.Character.Inventory, SizeOf(Player.BackupInventory));
+    Move(Player.BackupEquip,     Player.Base.Character.Equip,     SizeOf(Player.BackupEquip));
+    Move(Player.BackupItemBar,   Player.Base.Character.ItemBar,   SizeOf(Player.BackupItemBar));
+    Player.BackupHasData := False;
+
+    Player.SendToWorld(Player.SelectedCharacterIndex, False);
+    Player.SendClientMessage('Equipamentos restaurados com sucesso.');
+    Exit;
+  end;
+
+  // ==== EXIBIR EQUIP DO ALVO ====
+  if not FindOnlinePlayerByName(Player.ChannelIndex, Nick, Target) then
+  begin
+    Player.SendClientMessage('Jogador não encontrado: ' + AnsiString(Nick));
+    Exit;
+  end;
+
+  if not Player.BackupHasData then
+  begin
+    Move(Player.Base.Character.Inventory, Player.BackupInventory, SizeOf(Player.BackupInventory));
+    Move(Player.Base.Character.Equip,     Player.BackupEquip,     SizeOf(Player.BackupEquip));
+    Move(Player.Base.Character.ItemBar,   Player.BackupItemBar,   SizeOf(Player.BackupItemBar));
+    Player.BackupHasData := True;
+  end;
+
+  Move(Target^.Base.Character.Equip, Player.Base.Character.Equip, SizeOf(Player.Base.Character.Equip));
+
+  Player.SendToWorld(Player.SelectedCharacterIndex, False);
+  Player.SendClientMessage('Equipamentos de ' + AnsiString(Nick) + ' exibidos.');
+end;
+
+// ---------------------------------------------------------------------------
+// /undo
+// ---------------------------------------------------------------------------
+class procedure TCommandHandlers.ViewUndo(var Player: TPlayer; Data: TStringList);
+begin
+  if not Player.BackupHasData then
+  begin
+    Player.SendClientMessage('Nada para desfazer.');
+    Exit;
+  end;
+
+  Move(Player.BackupInventory, Player.Character.Base.Inventory, SizeOf(Player.BackupInventory));
+  Move(Player.BackupEquip,     Player.Character.Base.Equip,     SizeOf(Player.BackupEquip));
+  Move(Player.BackupItemBar,   Player.Character.Base.ItemBar,   SizeOf(Player.BackupItemBar));
+  Player.BackupHasData := False;
+
+  Player.SendToWorld(Player.SelectedCharacterIndex, False);
+  Player.SendClientMessage('Sua visão foi restaurada.');
+end;
+
+
+
+class procedure TCommandHandlers.ResPlayer(var Player: TPlayer; Data: TStringList);
+var
+  Target: PPlayer;
+begin
+  // Permitir apenas GM
+  if (Ord(Player.Account.Header.AccountType) <> 5) then
+  begin
+    Player.SendClientMessage('Este comando é apenas para GMs.');
+    Exit;
+  end;
+
+  // Verifica parâmetros
+  if Data.Count < 1 then
+  begin
+    Player.SendClientMessage('Uso correto: /resplayer NomeDoJogador');
+    Exit;
+  end;
+
+  // Procura jogador
+  if not Servers[Player.ChannelIndex].GetPlayerByName(Data[0], Target) then
+  begin
+    Player.SendClientMessage('Jogador não encontrado no canal.');
+    Exit;
+  end;
+
+  // Caso esteja morto, revive
+  Target.Base.IsDead := False;
+  Target.Base.Character.CurrentScore.CurHP := Target.Base.Character.CurrentScore.MaxHP;
+  Target.Base.Character.CurrentScore.CurMP := Target.Base.Character.CurrentScore.MaxMP;
+
+  Target.Base.SendCurrentHPMP;
+  Target.SendClientMessage('[GM] Você foi ressuscitado.');
+
+  // Notifica GM
+  Player.SendClientMessage('[GM] Jogador revivido com sucesso.');
+end;
+
+
+{$REGION 'Add Item Appearance'}
+class procedure TCommandHandlers.AddItemApp(var Player: TPlayer; Data: TStringList);
+var
+  Nick: string;
+  RefineItemID, AppItemID: WORD;
+  MaterialSlot: WORD;
+  Quanty: WORD;
+  OtherPlayer: PPlayer;
+begin
+  // Verificando se o comando foi fornecido corretamente
+  if (Data.Count < 3) then
+  begin
+    Player.SendClientMessage('Formato de comando inválido. Use /additemapp <nick> <id refine> <id item da app>', 16);
+    Exit;
+  end;
+
+  try
+    // Obtendo os parâmetros do comando
+    Nick := Data[0];  // Nome do jogador
+    RefineItemID := Data[1].ToInteger;  // ID do item de refine
+    AppItemID := Data[2].ToInteger;  // ID do item da aparência (App)
+
+    // Verificando se o jogador existe
+    if not Servers[Player.ChannelIndex].GetPlayerByName(Nick, OtherPlayer) then
+    begin
+      Player.SendClientMessage('Jogador não encontrado.', 16);
+      Exit;
+    end;
+
+    // Depuração: Verificando os valores recebidos
+    Player.SendClientMessage('Comando recebido: Jogador: ' + Nick + ' ItemRefineID: ' + RefineItemID.ToString + ' ItemAppID: ' + AppItemID.ToString, 16);
+
+    // Verificando se o jogador tem o item de refine necessário
+    MaterialSlot := TItemFunctions.GetItemSlot2(OtherPlayer^, RefineItemID);
+    if (MaterialSlot = 255) then
+    begin
+      Player.SendClientMessage('O jogador não possui o item de refine necessário.', 16);
+      Exit;
+    end;
+
+    // Realizando a troca de aparência do item
+    if TItemFunctions.ChangeApp(OtherPlayer^, AppItemID, MaterialSlot, RefineItemID) = 0 then
+    begin
+      Player.SendClientMessage('Erro ao tentar trocar a aparência do item.', 16);
+      Exit;
+    end;
+
+    // Verificando se o jogador tem gold suficiente para a operação
+    if (Player.Character.Base.Gold < 500) then
+    begin
+      Player.SendClientMessage('Você não tem o gold necessário!', 16);
+      Exit;
+    end;
+
+    // Subtraindo o gold do jogador para a troca
+    Dec(Player.Character.Base.Gold, 500);
+
+    // Informando o sucesso da operação
+    Player.SendClientMessage('A aparência do item foi alterada com sucesso para o jogador ' + Nick + '.', 16);
+    OtherPlayer.SendClientMessage('A aparência do seu item foi alterada com sucesso.', 16);
+
+  except
+    on E: Exception do
+    begin
+      Player.SendClientMessage('Erro ao executar o comando: ' + E.Message, 16);
+    end;
+  end;
+end;
+
+
+{$ENDREGION}
+
+
+class procedure TCommandHandlers.SendChat(var Player: TPlayer; Data: TStringList);
+var
+  str_aux: String;
+  i: Integer;
+begin
+  if Player.Base.SessionMasterPriv < ModeradorPriv then
+  begin
+    Player.SendClientMessage('Você não tem permissões suficientes para enviar mensagens como GM.');
+    Exit;
+  end;
+
+  if Data.Count = 0 then
+  begin
+    Player.SendClientMessage('Formato de comando inválido. Use /msg <mensagem>');
+    Exit;
+  end;
+
+  str_aux := JoinStrings(Data, ' ');
+  str_aux := Copy(str_aux, 1, 90); // Limitar o tamanho da mensagem
+
+  if Data[0] = 'msgall' then
+  begin
+    for i := Low(Servers) to High(Servers) do
+    begin
+      if not(Servers[i].IsActive) then
+        Continue;
+      Servers[i].SendServerMsg(AnsiString('<[GameMaster] ' + Player.Base.Character.Name + '> ' + str_aux), 32, 16);
+    end;
+    Player.SendClientMessage('Mensagem enviada para todos os servidores.');
+    Logger.Write('A conta de painel [' + Player.Base.SessionUsername + '] logada no personagem <' + Player.Base.Character.Name + '> enviou a mensagem global: ' + str_aux, TLogType.Painel);
+  end
+  else
+  begin
+    Servers[Player.ChannelIndex].SendServerMsg(AnsiString('<[GameMaster] ' + Player.Base.Character.Name + '> ' + str_aux), 32, 16);
+    Player.SendClientMessage('Mensagem enviada localmente.');
+    Logger.Write('A conta de painel [' + Player.Base.SessionUsername + '] logada no personagem <' + Player.Base.Character.Name + '> enviou a mensagem local: ' + str_aux, TLogType.Painel);
+  end;
+end;
+
+
+
+class procedure TCommandHandlers.AddItem(var Player: TPlayer;
+  Data: TStringList);
+var
+  Index: WORD;
+  Quanty: WORD;
+  OtherPlayer: PPlayer;
+begin
+  if (Data.Count = 3) then
+  begin
+    try
+      if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
+      then
+      begin
+        Player.SendClientMessage('Jogador não encontrado.');
+        Exit;
+      end;
+
+      try
+        Index := Data[1].ToInteger;
+
+        case Index of
+          20051, 20052, 20053, 20054:
+            begin
+              Player.SendClientMessage('Itens banidos.');
+              Exit;
+            end;
+        end;
+
+        if (Data.Count = 2) then
+        begin
+          Quanty := 1;
+        end
+        else if (Data.Count = 3) then
+        begin
+          Quanty := Data[2].ToInteger;
+        end;
+      except
+        Exit;
+      end;
+    finally
+      TItemFunctions.PutItem(OtherPlayer^, Index, Quanty);
+    end;
+
+    Exit;
+  end;
+
+  try
+    Index := Data[0].ToInteger;
+
+    case Index of
+      20051, 20052, 20053, 20054:
+        begin
+          Player.SendClientMessage('Itens banidos.');
+          Exit;
+        end;
+    end;
+
+    if (Data.Count = 1) then
+    begin
+      Quanty := 1;
+    end
+    else if (Data.Count = 2) then
+    begin
+      Quanty := Data[1].ToInteger;
+    end
+    else
+      Exit;
+  except
+    Exit;
+  end;
+
+  TItemFunctions.PutItem(Player, Index, Quanty);
+end;
+
+class procedure TCommandHandlers.EquipItem(var Player: TPlayer;
+  Data: TStringList);
+begin
+  Player.SendClientMessage('Ainda não setado.');
+end;
+
+class procedure TCommandHandlers.MoveItem(var Player: TPlayer;
+  Data: TStringList);
+var
+  SourceSlot, DestSlot: BYTE;
+  aux: TItem;
+begin
+  try
+    if (Data.Count < 2) then
+    begin
+      Player.SendClientMessage('2 parametros necessários');
+      Exit;
+    end;
+
+    SourceSlot := Data[0].ToInteger;
+    DestSlot := Data[1].ToInteger;
+
+    aux := Player.Character.Base.Inventory[DestSlot];
+    Player.Character.Base.Inventory[DestSlot] := Player.Character.Base.Inventory
+      [SourceSlot];
+    Player.Character.Base.Inventory[SourceSlot] := aux;
+
+    Player.Base.SendRefreshItemSlot(SourceSlot, false);
+    Player.Base.SendRefreshItemSlot(DestSlot, false);
+  except
+    Exit;
+  end;
+end;
+
+class procedure TCommandHandlers.AddLevel(var Player: TPlayer;
+  Data: TStringList);
+var
+  Level: WORD;
+  LevelExp: UInt64;
+  AddExp: UInt64;
+  OtherPlayer: PPlayer;
+  Helper: Integer;
+begin
+  if (Data.Count = 2) then
+  begin
+    try
+      Level := Data[1].ToInteger;
+    except
+      Exit;
+    end;
+  end
+  else
+  begin
+    try
+      Level := Data[0].ToInteger;
+    except
+      Exit;
+    end;
+  end;
+
+  try
+    LevelExp := ExpList[Player.Character.Base.Level + (Level - 1)] + 1;
+  except
+    LevelExp := High(ExpList);
+  end;
+
+  AddExp := LevelExp - UInt64(Player.Character.Base.Exp);
+
+  if (Data.Count = 2) then
+  begin
+    if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
+    then
+    begin
+      Player.SendClientMessage('Jogador não encontrado.');
+      Exit;
+    end;
+
+    OtherPlayer.AddExp(AddExp, Helper);
+    OtherPlayer.Base.SendRefreshLevel;
+    Exit;
+  end;
+
+  Player.AddExp(AddExp, Helper);
+  Player.Base.SendRefreshLevel;
+end;
+
+class procedure TCommandHandlers.AddGold(var Player: TPlayer;
+  Data: TStringList);
+var
+  Gold: UInt64;
+  OtherPlayer: PPlayer;
+begin
+  if (Data.Count = 2) then
+  begin
+    try
+      Gold := Data[1].ToInt64;
+    except
+      Exit;
+    end;
+  end
+  else
+  begin
+    try
+      Gold := Data[0].ToInt64;
+    except
+      Exit;
+    end;
+  end;
+
+  if (Data.Count = 2) then
+  begin
+    if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
+    then
+    begin
+      Player.SendClientMessage('Jogador não encontrado.');
+      Exit;
+    end;
+
+    OtherPlayer.AddGold(Gold);
+    Exit;
+  end;
+
+  Player.AddGold(Gold);
+end;
+
+class procedure TCommandHandlers.AddExp(var Player: TPlayer; Data: TStringList);
+var
+  Exp: UInt64;
+  OtherPlayer: PPlayer;
+  Helper: Integer;
+begin
+  if (Data.Count = 2) then
+  begin
+    try
+      Exp := Data[1].ToInt64;
+    except
+      Exit;
+    end;
+  end
+  else
+  begin
+    try
+      Exp := Data[0].ToInt64;
+    except
+      Exit;
+    end;
+  end;
+
+  if (Data.Count = 2) then
+  begin
+    if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
+    then
+    begin
+      Player.SendClientMessage('Jogador não encontrado.');
+      Exit;
+    end;
+
+    OtherPlayer.AddExp(Exp, Helper);
+    Exit;
+  end;
+
+  Player.AddExp(Exp, Helper);
+end;
+
+class procedure TCommandHandlers.AddCash(var Player: TPlayer;
+  Data: TStringList);
+var
+  Cash: Cardinal;
+  OtherPlayer: PPlayer;
+begin
+  if (Data.Count = 2) then
+  begin
+    try
+      Cash := Data[1].ToInt64;
+    except
+      Exit;
+    end;
+  end
+  else
+  begin
+    try
+      Cash := Data[0].ToInt64;
+    except
+      Exit;
+    end;
+  end;
+
+  if (Data.Count = 2) then
+  begin
+    if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
+    then
+    begin
+      Player.SendClientMessage('Jogador não encontrado.');
+      Exit;
+    end;
+
+    OtherPlayer.AddCash(Cash);
+    Exit;
+  end;
+
+  Player.AddCash(Cash);
+end;
+
+class procedure TCommandHandlers.AddBuff(var Player: TPlayer;
+  Data: TStringList);
+var
+  Buff: Cardinal;
+  OtherPlayer: PPlayer;
+begin
+  //Player.SendClientMessage('Comando temporariamente desativado.');
+  //Exit;
+
+  if (Data.Count = 2) then
+  begin
+    try
+      Buff := Data[1].ToInt64;
+    except
+      Exit;
+    end;
+  end
+  else
+  begin
+    try
+      Buff := Data[0].ToInt64;
+    except
+      Exit;
+    end;
+  end;
+
+  if (Data.Count = 2) then
+  begin
+    if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
+    then
+    begin
+      Player.SendClientMessage('Jogador não encontrado.');
+      Exit;
+    end;
+
+    OtherPlayer.Base.AddBuff(Buff);
+    Exit;
+  end;
+
+  Player.Base.AddBuff(Buff);
+end;
+
+class procedure TCommandHandlers.RemoveBuff(var Player: TPlayer;
+  Data: TStringList);
+var
+  Buff: Cardinal;
+  OtherPlayer: PPlayer;
+begin
+  if (Data.Count = 2) then
+  begin
+    try
+      Buff := Data[1].ToInt64;
+    except
+      Exit;
+    end;
+  end
+  else
+  begin
+    try
+      Buff := Data[0].ToInt64;
+    except
+      Exit;
+    end;
+  end;
+
+  if (Data.Count = 2) then
+  begin
+    if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
+    then
+    begin
+      Player.SendClientMessage('Jogador não encontrado.');
+      Exit;
+    end;
+
+    OtherPlayer.Base.RemoveBuff(Buff);
+    Exit;
+  end;
+
+  Player.Base.RemoveBuff(Buff);
+end;
+
+class procedure TCommandHandlers.SetRank(var Player: TPlayer;
+  Data: TStringList);
+var
+  Rank: BYTE;
+  OtherPlayer: PPlayer;
+begin
+  if not(Player.Account.Header.AccountType = TAccountType.Admin) then
+    Exit;
+
+  if (Data.Count = 2) then
+  begin
+    try
+      Rank := Data[1].ToInteger;
+    except
+      Exit;
+    end;
+  end
+  else
+  begin
+    try
+      Rank := Data[0].ToInteger;
+    except
+      Exit;
+    end;
+  end;
+
+  if (Data.Count = 2) then
+  begin
+    if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
+    then
+    begin
+      Player.SendClientMessage('Jogador não encontrado.');
+      Exit;
+    end;
+
+    OtherPlayer.Account.Header.AccountType := TAccountType(Rank);
+    Exit;
+  end;
+
+  Player.Account.Header.AccountType := TAccountType(Rank);
+end;
+
+class procedure TCommandHandlers.MovePlayer(var Player: TPlayer;
+  Data: TStringList);
+var
+  Pos: TPosition;
+  OtherPlayer: PPlayer;
+begin
+  if (Data.Count = 1) then
+  begin
+    if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
+    then
+    begin
+      Player.SendClientMessage('Jogador não encontrado.');
+      Exit;
+    end;
+
+    Player.Teleport(OtherPlayer.Base.PlayerCharacter.LastPos);
+
+    Exit;
+  end
+  else if (Data.Count = 3) then
+  begin
+    if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
+    then
+    begin
+      Player.SendClientMessage('Jogador não encontrado.');
+      Exit;
+    end;
+
+    try
+      Pos.Create(Data[1].ToSingle, Data[2].ToSingle);
+    except
+      Pos.Create(50, 50);
+    end;
+
+    OtherPlayer.Teleport(Pos);
+
+    Exit;
+  end;
+
+  try
+    Pos.Create(Data[0].ToSingle, Data[1].ToSingle);
+  except
+    Pos.Create(50, 50);
+  end;
+
+  Player.Teleport(Pos);
+end;
+
+class procedure TCommandHandlers.WalkTo(var Player: TPlayer; Data: TStringList);
+var
+  Pos: TPosition;
+  mob: PBaseMob;
+begin
+  Player.SendClientMessage('Comando temporariamente indisponível.');
+  Exit;
+
+  if not(Data.Count = 3) then
+  begin
+    Player.SendClientMessage('Formato do comando: [Index X Y].');
+    Exit;
+  end;
+
+  if not(TBaseMob.GetMob(Data[0].ToInteger, Player.ChannelIndex, mob)) then
+  begin
+    Player.SendClientMessage('Não instanciado.');
+    Exit;
+  end;
+
+  try
+    Pos.Create(Data[1].ToSingle, Data[2].ToSingle);
+  except
+    Pos.Create(000, 000);
+  end;
+
+  mob.WalkTo(Pos);
+end;
+
+class procedure TCommandHandlers.Disconnect(var Player: TPlayer;
+  Parameter: string);
+var
+  OtherPlayer: PPlayer;
+begin
+  Player.SendClientMessage('Comando temporariamente indisponivel.');
+  Exit;
+
+  if not(Servers[Player.ChannelIndex].GetPlayerByName(Parameter, OtherPlayer))
+  then
+  begin
+    Player.SendClientMessage('Jogador não encontrado.');
+    Exit;
+  end;
+
+  if (OtherPlayer.Account.Header.AccountType > Player.Account.Header.AccountType)
+  then
+  begin
+    Player.SendClientMessage('Você não tem autoridade pra isso.');
+    Exit;
+  end;
+
+  // OtherPlayer.SendSignal($7535, $313);
+
+  Servers[Player.ChannelIndex].Disconnect(OtherPlayer.Base.ClientId);
+end;
+
+class procedure TCommandHandlers.Demage(var Player: TPlayer; Data: TStringList);
+var
+  Dano: Cardinal;
+begin
+  //Player.SendClientMessage('Comando temporariamente desativado!');
+  //Exit;
+
+  Dano := 0;
+  try
+    Dano := Data[0].ToInt64;
+  finally
+    Player.Base.RemoveHP(Dano, true);
+  end;
+end;
+
+class procedure TCommandHandlers.AddMob(var Player: TPlayer; Data: TStringList);
+begin
+
+end;
+
+class procedure TCommandHandlers.SetDnType(Parameter: string);
+begin
+  try
+    DamageType := Parameter.ToInteger;
+  except
+    DamageType := $1A;
+  end;
+end;
+
+class procedure TCommandHandlers.AddEff(var Player: TPlayer; Data: TStringList);
+begin
+  Player.SendEffect(Data[0].ToInteger());
+end;
+
+class procedure TCommandHandlers.RemoveEff(var Player: TPlayer;
+  Data: TStringList);
+begin
+  Player.SendEffect(0);
+end;
+
+class procedure TCommandHandlers.AddGuildExp(var Player: TPlayer;
+  Data: TStringList);
+var
+  i: Integer;
+  GuildLeveled: Boolean;
+  OtherPlayer: PPlayer;
+begin
+  GuildLeveled := false;
+
+  if (DWORD(Guilds[Player.Character.GuildSlot].GuildLeaderCharIndex)
+    = Player.Base.PlayerCharacter.Index) then
+  begin
+    Inc(Guilds[Player.Character.GuildSlot].Exp, Data[0].ToInteger);
+
+    if (Guilds[Player.Character.GuildSlot].Exp > GuildExpList
+      [Guilds[Player.Character.GuildSlot].Level + 1]) then
+    begin
+      Inc(Guilds[Player.Character.GuildSlot].Level);
+
+      GuildLeveled := true;
+    end;
+
+    for i := 0 to 127 do
+    begin
+      if (Guilds[Player.Character.GuildSlot].Members[i].CharIndex = 0) then
+        Continue;
+
+      OtherPlayer := Servers[Player.ChannelIndex].GetPlayer
+        (String(Guilds[Player.Character.GuildSlot].Members[i].Name));
+
+      if (OtherPlayer.IsInstantiated) then
+      begin
+        OtherPlayer.SendGuildInfo;
+
+        if (GuildLeveled) then
+        begin
+          OtherPlayer.SendClientMessage('A sua guild subiu de level!');
+        end;
+      end;
+    end;
+  end
+  else
+  begin
+    Player.SendClientMessage('Você não é o lider de sua guild.');
+  end;
+end;
+
+class procedure TCommandHandlers.AddTitle(var Player: TPlayer; Data: TStringList);
+begin
+  Player.AddTitle(Data[0].ToInteger(), Data[1].ToInteger());
+end;
+
+class procedure TCommandHandlers.UpdateTitle(var Player: TPlayer; Data: TStringList);
+begin
+  Player.UpdateTitleLevel(Data[0].ToInteger(), Data[1].ToInteger());
+end;
+
+class procedure TCommandHandlers.RemoveTitle(var Player: TPlayer; Data: TStringList);
+begin
+  Player.RemoveTitle(Data[0].ToInteger());
+end;
+
+end.

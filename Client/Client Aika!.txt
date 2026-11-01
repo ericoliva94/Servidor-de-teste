@@ -1,0 +1,58 @@
+AIKA GLOBAL
+
+English
+
+Download AIKA Global
+
+Download: https://patch-aikaonline.cbmgames.com/fullclient/AikaOnlineGlobal_Setup.exe
+
+
+
+The server is already configured for public connections.
+
+
+
+If someone wants to use this server on their own network, they must use the provided ConfigBin program to configure their public IP inside the provided SL.bin file.
+
+
+
+After configuring the public IP, replace the SL.bin file inside the downloaded AIKA Global client with the newly configured one, and then distribute that client to the other players.
+
+
+
+Important: You must use the SL.bin file provided by me. If you use another SL.bin, the client will not connect correctly.
+
+
+
+The ConfigBin program is included specifically to configure the public IP inside the provided SL.bin.
+
+
+
+
+
+
+Português
+
+Download AIKA Global
+
+Download: https://patch-aikaonline.cbmgames.com/fullclient/AikaOnlineGlobal_Setup.exe
+
+
+
+O servidor já está configurado para conexão pública.
+
+
+
+Caso outra pessoa queira utilizar este servidor na própria rede, deverá usar o programa ConfigBin disponibilizado por mim para configurar o próprio IP público dentro do arquivo SL.bin fornecido.
+
+
+
+Depois de configurar o IP público, deverá substituir o SL.bin existente dentro do AIKA Global baixado pelo novo SL.bin configurado e então disponibilizar esse cliente para os outros jogadores.
+
+
+
+Importante: É obrigatório utilizar o SL.bin disponibilizado por mim. Se utilizar outro SL.bin, o cliente não irá conectar corretamente.
+
+
+
+O ConfigBin foi disponibilizado especificamente para configurar o IP público dentro do SL.bin fornecido.

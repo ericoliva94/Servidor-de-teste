@@ -1,0 +1,7 @@
+Nome,Face,Weapon,HP,MobType,Atkfis,AtkMag,Deffis,Defmag,Level
+Max_Filhote,216,0,225,1,30,0,20,0,1
+Max_Domesticado,216,0,260,1,35,0,25,0,3
+Merkbee,303,0,250,1,35,0,30,0,5
+Toupeira_Covarde,209,0,270,1,45,0,40,0,7
+Toupeira_Exilada,209,0,275,1,45,0,45,0,9
+Lazil,254,0,640

@@ -1,0 +1,103 @@
+| ID      | Nome / Descrição                          | Duração | Classe / Tipo |
+| ------- | ----------------------------------------- | ------- | ------------- |
+| 40      | Block Warrior (Bloqueio)                  | 60s     | Warrior       |
+| 62      | Revitalizar / Cura periódica              | 60s     | Warrior       |
+| 90      | Convocar Montaria (Velocidade + montaria) | 70s     | Geral / Mount |
+| 170–176 | Fúria do Guerreiro                        | 10min   | Warrior       |
+| 193–208 | Canção da Glória                          | 10min   | Warrior       |
+| 257–271 | Canção da Bravura                         | 10min   | Warrior       |
+| 305–319 | Despertar                                 | 10min   | Warrior       |
+| 338–352 | Canção da Defesa                          | 10min   | Warrior       |
+| 400     | Medo                                      | 15s     | Debuff        |
+| 480     | Mestre da Espada                          | 10min   | Warrior       |
+| 512     | Uivo da Liberdade                         | 16s     | Warrior       |
+| 528     | Uivo de Sangue                            | 39s     | Warrior       |
+| 544     | Espada Sangrenta                          | 10min   | Warrior       |
+
+| ID   | Nome / Descrição                       | Duração |
+| ---- | -------------------------------------- | ------- |
+| 1138 | Guardião                               | 10min   |
+| 1152 | Sangue Sagrado                         | 40s     |
+| 1184 | Defesa Concentrada                     | 12s     |
+| 1232 | União Divina (50% dano vai pro aliado) | —       |
+| 1248 | Bolha Templária                        | 10min   |
+| 1280 | Escudo Refletor   S                     | 20s     |
+| 1312 | El Aster                               | 30s     |
+| 1328 | El Thymos                              | 40s     |
+| 1344 | El Aegis                               | 40s     |
+| 1392 | Lâminas Templárias                     | 30s     |
+| 1440 | Fé Imortal                             | 1min    |
+| 1472 | Carinho do Céu                         | 10min   |
+| 1504 | Escudo Celestial                       | 10min   |
+| 1520 | Forja de Aço                           | —       |
+| 1536 | Salvador Imprudente                    | —       |
+
+
+| ID   | Nome / Descrição        | Duração |
+| ---- | ----------------------- | ------- |
+| 2096 | Invisibilidade Atirador | —       |
+| 2352 | Predador Atirador       | —       |
+| 8400 | Invisibilidade curta    | 4s      |
+
+
+| ID   | Nome / Descrição       | Duração |
+| ---- | ---------------------- | ------- |
+| 3056 | Invisibilidade Dual    | —       |
+| 3248 | Reload das Skills Dual | —       |
+
+
+| ID        | Nome / Descrição                                | Efeito  |
+| --------- | ----------------------------------------------- | ------- |
+| 5232      | Esplendor / Explosion Magic                     | —       |
+| 6610      | Congelamento forte (tipo “gelinho”) 7s          | Freeze  |
+| 6612      | Silence Mago                                    | Silence |
+| 6614      | Flecha Congelante – Lentidão                    | Slow    |
+| 6615      | Flecha Congelante Explosiva – Slow              | Slow    |
+| 6616      | Congelamento 3s                                 | Freeze  |
+| 6617      | Medo Primordial 11s                             | Fear    |
+| 6618      | Golpe Mortal – (Possível stun ou bleed)         | ?       |
+| 6619      | Rasteira Mortal – Stun 5s (War)                 | Stun    |
+| 6620      | Golpe Congelante – Slow 6s                      | Slow    |
+| 6621      | Dardo de Gelo – Slow 10s                        | Slow    |
+| 6624      | Congelamento Permanente – 11s                   | Freeze  |
+| 6625      | Choque Mental – Silence 6s                      | Silence |
+| 6626      | Outro golpe congelante – Slow 6s                | Slow    |
+| 6629      | Amplificador de Dano (quebra de defesa mágica?) | Buff    |
+| 6633      | Poder Copiado do Rei – +ATK Físico              | Buff    |
+| 6637      | Fragmento de Gelo – Slow 15s + Visual           | Slow    |
+| 6638      | Senhor do Sangue – +ATK Físico + Mágico         | Buff    |
+| 6639      | Poder do Rei / Silêncio 20s                     | Silence |
+| 6640      | Poder da Morte do Rei                           | Buff?   |
+| 6642      | Poção Anti Magia (Resist Authority) 1h          | Resist  |
+| 6643–6645 | Fúria Fantasma Negra (Evasão/Crítico/Atk)       | Buffs   |
+| 6646      | Outro congelamento 3s                           | Freeze  |
+| 6648      | Cavalheiros do Archon                           | CS buff |
+| 6649      | Admin Buff                                      | GM Buff |
+| 6650      | Congelamento 5s                                 | Freeze  |
+| 6651      | Adormecido 3s                                   | Sleep   |
+| 6669      | Fúria – ATK físico 10min                        | Buff    |
+| 7100      | Olhar da Rainha – Stun 3s                       | Stun    |
+
+| ID    | Nome                       | Duração  |
+| ----- | -------------------------- | -------- |
+| 7300+ | Buffs de “Tempo de Guerra” | Variável |
+| 7305  | Guerra adicional           | —        |
+| 8500  | Bênção da Giovani          | 1h       |
+| 8501  | Bênção da Giovani          | 1h       |
+
+| ID   | Nome                       | Nível |
+| ---- | -------------------------- | ----- |
+| 8539 | Fúria do Devir Lv 1        | 1     |
+| 8543 | Defesa do Devir Lv 1       | 1     |
+| 8547 | Proteção do Devir Lv 1     | 1     |
+| 8565 | Cuidados Poderosos de Aika | —     |
+
+
+| ID   | Observação                           |
+| ---- | ------------------------------------ |
+| 6640 | Poder do Rei — não documentado       |
+| 6618 | Golpe Mortal — efeito indefinido     |
+| 6638 | Senhor do Sangue — mistura ATK/Speed |
+| 6645 | Versão diferente do buff fantasma    |
+
+

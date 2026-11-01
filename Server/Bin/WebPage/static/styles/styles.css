@@ -1,0 +1,125 @@
+/* ====== FONTE RPG ====== */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap');
+
+/* ====== GERAL ====== */
+body {
+  background: url("https://i.imgur.com/pn8i8EE.jpg") center/cover fixed; /* textura medieval leve */
+  font-family: "Cinzel", serif;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  color: #f3e9d2;
+}
+
+/* ====== LAYOUT ====== */
+.page-wrap {
+  width: 100%;
+  max-width: 460px;
+  padding: 20px;
+}
+
+.card {
+  background: rgba(30, 24, 18, 0.82);
+  border: 2px solid #b38b56;
+  padding: 35px 32px;
+  border-radius: 8px;
+  box-shadow: 0 0 25px rgba(0,0,0,0.65);
+  position: relative;
+  text-align: center;
+}
+
+/* Moldura decorativa */
+.card::before,
+.card::after {
+  content: "";
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background: url("https://i.imgur.com/Qr2kT1u.png") center/contain no-repeat;
+}
+
+.card::before { left: -12px; top: -12px; }
+.card::after { right: -12px; bottom: -12px; }
+
+/* ====== TÍTULO ====== */
+.title {
+  font-size: 30px;
+  font-weight: 700;
+  text-shadow: 0 0 8px #000, 0 0 3px #caa86f;
+  margin-bottom: 30px;
+}
+
+/* ====== FORM ====== */
+.label {
+  font-size: 15px;
+  text-align: left;
+  display: block;
+  margin-bottom: 5px;
+  text-shadow: 0 0 2px #000;
+}
+
+.input {
+  width: 90%;
+  padding: 10px 12px;
+  font-size: 15px;
+  border: 1px solid #96744e;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.08);
+  color: #f7e7c8;
+  margin-bottom: 18px;
+  transition: 0.25s;
+}
+
+.input:focus {
+  border-color: #d5b17a;
+  background: rgba(255,255,255,0.16);
+  outline: none;
+}
+
+/* ====== BOTÃO ====== */
+.btn {
+  width: 60%;
+  padding: 12px;
+  background: linear-gradient(to bottom, #d7b480, #8a6433);
+  border: 1px solid #6d4a22;
+  color: #fff3d0;
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: 0.25s;
+  margin-top: 5px;
+}
+
+.btn:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+/* ====== LINKS ====== */
+.link {
+  display: inline-block;
+  margin-top: 18px;
+  font-size: 14px;
+  color: #e8cfa1;
+  text-decoration: none;
+  transition: 0.25s;
+}
+
+.link:hover {
+  color: #fff9e8;
+  text-shadow: 0 0 5px #c8a46a;
+  transform: scale(1.05);
+}
+
+/* ====== FLASH ====== */
+.flash {
+  background: rgba(120, 0, 0, 0.65);
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid #caa86f;
+  margin-bottom: 18px;
+  font-size: 14px;
+}

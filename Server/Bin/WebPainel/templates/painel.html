@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administrative Panel - Server</title>
+    <meta name="description" content="Game server administration panel">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>Admin Panel</h1>
+                <div class="server-status">
+                    <span class="status-indicator active"></span>
+                    <span>Online</span>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-section="console">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="4 17 10 11 4 5"></polyline>
+                        <line x1="12" y1="19" x2="20" y2="19"></line>
+                    </svg>
+                    Console
+                </button>
+                <button class="nav-item" data-section="accounts">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    Accounts
+                </button>
+                <button class="nav-item" data-section="events">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    Events
+                </button>
+                <button class="nav-item" data-section="itens">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                    </svg>
+                    Items
+                </button>
+                <button class="nav-item" data-section="additem">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Add Item
+                </button>
+                <button class="nav-item" data-section="addbuff">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                    </svg>
+                    Add Buff
+                </button>
+                <button class="nav-item" data-section="leilao">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    </svg>
+                    Auction
+                </button>
+                <button class="nav-item" data-section="guilds">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    Guilds
+                </button>
+                <button class="nav-item" data-section="nations">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                        <line x1="4" y1="22" x2="4" y2="15"></line>
+                    </svg>
+                    Nations
+                </button>
+                <button class="nav-item" data-section="devires">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    Devires
+                </button>
+                <button class="nav-item" data-section="quests">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    Quests
+                </button>
+                <button class="nav-item" data-section="prans">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                    </svg>
+                    Prans
+                </button>
+                <button class="nav-item" data-section="titles">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                    </svg>
+                    Titles
+                </button>
+                <button class="nav-item" data-section="webstore">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="9" cy="21" r="1"></circle>
+                        <circle cx="20" cy="21" r="1"></circle>
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                    </svg>
+                    Webstore
+                </button>
+                <button class="nav-item" data-section="pincodes">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    PIN Codes
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Console Section -->
+            <section id="console" class="content-section active">
+                <header class="section-header">
+                    <h2>Server Console</h2>
+                    <div class="header-stats">
+                        <div class="stat">
+                            <span class="stat-label">Players Online</span>
+                            <span class="stat-value" id="players-count">0</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Uptime</span>
+                            <span class="stat-value">2h 34m</span>
+                        </div>
+                    </div>
+                </header>
+
+                <div class="console-container">
+                    <div class="console-output" id="console-output">
+                        <div class="console-line info">
+                            <span class="console-time">10:32:15</span>
+                            <span class="console-message">Server started successfully</span>
+                        </div>
+                    </div>
+                    <div class="console-input-wrapper">
+                        <span class="console-prompt">$</span>
+                        <input type="text" class="console-input" id="console-input" placeholder="Enter a command...">
+                        <button class="console-send" id="console-send">Send</button>
+                    </div>
+                </div>
+
+                <div class="players-section">
+                    <div class="players-header">
+                        <h3>Online Players</h3>
+                        <div class="search-wrapper">
+                            <input type="text" class="search-input" id="player-search" placeholder="Search player...">
+                            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <path d="m21 21-4.35-4.35"></path>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table class="players-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Level</th>
+                                    <th>Class</th>
+                                    <th>IP</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="players-tbody">
+                                <!-- Players will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Accounts Section -->
+            <section id="accounts" class="content-section">
+                <header class="section-header">
+                    <h2>Account Management</h2>
+                </header>
+                <div class="placeholder-content">
+                    <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <p>Account management section</p>
+                </div>
+            </section>
+
+            <!-- Events Section -->
+            <section id="events" class="content-section">
+                <header class="section-header">
+                    <h2>Server Events</h2>
+                </header>
+                <div class="placeholder-content">
+                    <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    <p>Events section</p>
+                </div>
+            </section>
+
+            <!-- Other sections with similar structure -->
+            <section id="itens" class="content-section">
+                <header class="section-header">
+                    <h2>Item Management</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>Items section</p>
+                </div>
+            </section>
+
+            <section id="additem" class="content-section">
+                <header class="section-header">
+                    <h2>Add Item</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>Add item form</p>
+                </div>
+            </section>
+
+            <section id="addbuff" class="content-section">
+                <header class="section-header">
+                    <h2>Add Buff</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>Add buff form</p>
+                </div>
+            </section>
+
+            <section id="leilao" class="content-section">
+                <header class="section-header">
+                    <h2>Auction System</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>Auction section</p>
+                </div>
+            </section>
+
+            <section id="guilds" class="content-section">
+                <header class="section-header">
+                    <h2>Guild Management</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>Guild section</p>
+                </div>
+            </section>
+
+            <section id="nations" class="content-section">
+                <header class="section-header">
+                    <h2>Nation Management</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>Nation section</p>
+                </div>
+            </section>
+
+            <section id="devires" class="content-section">
+                <header class="section-header">
+                    <h2>Devir System</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>Devir section</p>
+                </div>
+            </section>
+
+            <section id="quests" class="content-section">
+                <header class="section-header">
+                    <h2>Quest Management</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>Quest section</p>
+                </div>
+            </section>
+
+            <section id="prans" class="content-section">
+                <header class="section-header">
+                    <h2>Pran Management</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>Pran section</p>
+                </div>
+            </section>
+
+            <section id="titles" class="content-section">
+                <header class="section-header">
+                    <h2>Title Management</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>Title section</p>
+                </div>
+            </section>
+
+            <section id="webstore" class="content-section">
+                <header class="section-header">
+                    <h2>Web Store</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>Web Store section</p>
+                </div>
+            </section>
+
+            <section id="pincodes" class="content-section">
+                <header class="section-header">
+                    <h2>PIN Code Management</h2>
+                </header>
+                <div class="placeholder-content">
+                    <p>PIN Code section</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Action Modal -->
+    <div class="modal" id="action-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Player Action</h3>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="modal-message"></p>
+                <input type="text" class="modal-input" id="modal-input" placeholder="Enter details...">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+                <button class="btn btn-primary" id="modal-confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

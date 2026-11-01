@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b0908">
+    <title>AIKA | Private Server</title>
+    <link rel="stylesheet" href="/static/styles/styles.css">
+    <link rel="stylesheet" href="/static/styles/index.css">
+    <link rel="stylesheet" href="/static/styles/painel.css">
+</head>
+<body class="home-body">
+<header class="site-header">
+    <a class="brand" href="/" aria-label="AIKA home"><span class="brand-mark">A</span><span class="brand-type"><strong>AIKA</strong><small>PRIVATE SERVER</small></span></a>
+    <div class="server-pulse"><span class="pulse-dot"></span><span>SERVER ONLINE</span><b>SEASON 01</b></div>
+</header>
+
+<div class="home-container">
+    <section class="hero-box">
+        <p class="eyebrow"><span></span>WAR OF NATIONS</p>
+        <h1 class="hero-title">Choose your side.<br><em>Forge your legend.</em></h1>
+        <p class="hero-sub">A world shaped by relentless battles, powerful alliances, and the nation you choose to defend.</p>
+        <div class="hero-buttons">
+            <a href="/register" class="btn-main">CREATE ACCOUNT</a>
+            <a href="/login" class="btn-main">PLAYER LOGIN</a>
+            <a href="#cash-store" class="btn-main">VIEW STORE</a>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+            <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+            <div class="hero-seal"><span class="seal-top">UNITED IN</span><strong>AIKA</strong><span class="seal-bottom">ETERNAL WAR</span></div>
+            <div class="sigil sigil-left">A</div><div class="sigil sigil-right">E</div>
+        </div>
+        <div class="hero-foot"><span>01</span><i></i><span>THE WAR BEGINS HERE</span></div>
+    </section>
+
+    <div class="war-stats">
+        <div><strong>02</strong><span>Rival Nations</span></div>
+        <div><strong>24/7</strong><span>World Online</span></div>
+        <div><strong>8822</strong><span>Game Port</span></div>
+        <a href="#cash-store">Explore the shop <span>&rarr;</span></a>
+    </div>
+
+    <div class="main-layout">
+        <aside class="account-rail">
+            <div class="rail-kicker">COMMAND CENTER</div>
+            {% if user %}
+                {% include "painel_side.html" %}
+            {% else %}
+                {% include "painel_guest.html" %}
+            {% endif %}
+            <div class="rail-note"><span class="rail-note-icon">!</span><p>Keep your account secure. Never share your credentials with another player.</p></div>
+        </aside>
+
+        <div class="right-column">
+            <section class="news-box">
+                <div class="news-title">Latest Dispatches</div>
+                <article class="news-item"><b>War of Nations</b>Gather your guild. The battle for the frontier begins this Saturday at 20:00.</article>
+                <article class="news-item"><b>Patch 1.2</b>New combat tuning and quality-of-life improvements are now live.</article>
+                <article class="news-item"><b>World Drop</b>Rare equipment has been added to the Leviathan reward pool.</article>
+            </section>
+
+            <section class="cash-store-box" id="cash-store">
+                <div class="store-title">Cash Store</div>
+                <div class="carousel-wrapper">
+                    <div class="carousel-track">
+                        <article class="store-item"><img src="/static/img/store/extract_hira_f.png" alt="Hira Extract F"><div class="item-name">Hira Extract - F</div><div class="item-price">200 Cash</div></article>
+                        <article class="store-item"><img src="/static/img/store/extract_hira_e.png" alt="Hira Extract E"><div class="item-name">Hira Extract - E</div><div class="item-price">300 Cash</div></article>
+                        <article class="store-item"><img src="/static/img/store/extract_kaize_f.png" alt="Kaize Extract F"><div class="item-name">Kaize Extract - F</div><div class="item-price">150 Cash</div></article>
+                        <article class="store-item"><img src="/static/img/store/extract_kaize_e.png" alt="Kaize Extract E"><div class="item-name">Kaize Extract - E</div><div class="item-price">250 Cash</div></article>
+                        <article class="store-item"><img src="/static/img/store/potion_aux_pc.png" alt="Powerful Aid Potion"><div class="item-name">Powerful Aid Potion</div><div class="item-price">10,000 Cash</div></article>
+                        <article class="store-item"><img src="/static/img/store/symbol_practice.png" alt="Practice Symbol"><div class="item-name">Practice Symbol (1 Hour)</div><div class="item-price">6,000 Cash</div></article>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<footer class="site-footer"><span>AIKA PRIVATE SERVER</span><i></i><span>FORGED FOR THE COMMUNITY</span></footer>
+</body>
+</html>

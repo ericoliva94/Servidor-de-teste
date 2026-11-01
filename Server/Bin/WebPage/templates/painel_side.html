@@ -1,0 +1,16 @@
+<div class="side-panel">
+    <h2 class="side-title">{{ user }}</h2>
+    <p><b>Cash:</b> {{ conta.cash }}</p>
+    <p><b>Nation:</b> {{ conta.nation_name if conta.nation_name else "No Nation" }}</p>
+    <hr>
+    <div class="side-sub">Characters</div>
+    {% if personagens %}
+        {% for p in personagens %}
+        <div class="char-side-item">{{ p.name }} - Lv {{ p.level }}</div>
+        {% endfor %}
+    {% else %}
+        <p>No characters found.</p>
+    {% endif %}
+    <a href="/painel" class="side-link">Open Dashboard</a>
+    <a href="/logout" class="side-link red">Sign Out</a>
+</div>

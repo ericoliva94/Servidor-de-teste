@@ -1,0 +1,71 @@
+/* ===== PAINEL ===== */
+
+.page-wrap {
+  width: 100%;
+  max-width: 1000px; /* Agora bem mais largo / estilo dashboard */
+  margin: auto;
+  padding-top: 60px;
+}
+
+/* Aumentando o CARD para painel */
+.card {
+  background: rgba(30, 24, 18, 0.85);
+  border: 2px solid #b38b56;
+  padding: 40px;
+  border-radius: 10px;
+  box-shadow: 0 0 35px rgba(0,0,0,0.8);
+  text-align: center;
+}
+
+/* Títulos */
+.title {
+  font-size: 34px;
+  margin-bottom: 25px;
+  text-shadow: 0 0 12px #000, 0 0 6px #caa86f;
+}
+
+.subtitle {
+  margin-top: 25px;
+  font-size: 22px;
+  text-shadow: 0 0 8px #000;
+  color: #f3e9d2;
+}
+
+/* Tabela de personagens */
+.char-table {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  font-size: 16px;
+}
+
+.char-table th {
+  background: rgba(80, 60, 30, 0.9);
+  border: 1px solid #b38b56;
+  padding: 10px;
+  text-transform: uppercase;
+  color: #f3e9d2;
+}
+
+.char-table td {
+  border: 1px solid #b38b56;
+  background: rgba(255,255,255,0.05);
+  padding: 10px;
+  text-align: center;
+  color: #e7dbc1;
+}
+
+/* Link sair */
+.link {
+  display: inline-block;
+  margin-top: 18px;
+  color: #e8cfa1;
+  font-size: 16px;
+  text-decoration: none;
+}
+
+.link:hover {
+  color: #fff9e8;
+  text-shadow: 0 0 6px #c8a46a;
+}
+

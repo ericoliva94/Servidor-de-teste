@@ -1,0 +1,23 @@
+Apos criar a guilda o parametro da guilda guildindex que gerencia o lider da guilda estava se auto apagando, atualizei os arquivos guild.pas e usei o comando 
+
+UPDATE characters 
+SET guildindex = 7
+WHERE id = 6;
+
+para setar o meu id da guild a mim 
+
+e 
+
+SELECT id, name, guildindex 
+FROM characters 
+WHERE id = 6;
+
+
+para conrferir se foi aplicado 
+
+apagar essas linhas 
+
+Self.Character.Base.GuildIndex := 0;
+
+elas excluem a guilda 
+

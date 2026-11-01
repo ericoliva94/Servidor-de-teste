@@ -1,0 +1,3 @@
+# As regras do repositorio estao no .gitignore da raiz.
+# (O original ignorava Bin/, *.exe, *.ini, *.bin, *.txt... e deixava o
+# servidor sem os dados necessarios para rodar.)

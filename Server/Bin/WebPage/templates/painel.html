@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Painel do Usuário</title>
+    <link rel="stylesheet" href="/static/styles/styles.css">
+    <link rel="stylesheet" href="/static/styles/painel.css">
+</head>
+<body>
+
+<div class="page-wrap">
+    <div class="card">
+
+        <div class="title">PAINEL DO USUÁRIO</div>
+
+        <p>Bem-vindo, <b>{{ username.upper() }}</b>!</p>
+        <p><b>Cash:</b> {{ conta.cash }}</p>
+        <p><b>Nação:</b> {{ conta.nation_name if conta.nation_name else "Sem Nação" }}</p>
+
+        <hr class="divider">
+
+        <div class="subtitle">PERSONAGENS</div>
+
+        {% if personagens %}
+        <table class="char-table">
+            <tr>
+                <th>Nome</th>
+                <th>Classe</th>
+                <th>Nível</th>
+                <th>Gold</th>
+            </tr>
+            {% for p in personagens %}
+            <tr>
+                <td>{{ p.name }}</td>
+                <td>{{ p.class_name }}</td>
+                <td>{{ p.level }}</td>
+                <td>{{ p.gold }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        <p>Nenhum personagem encontrado.</p>
+        {% endif %}
+
+        <a href="/logout" class="link">SAIR</a>
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuração do Servidor - AIKA PYTHON</title>
+    <!-- Herda completamente o estilo do dashboard -->
+    <link rel="stylesheet" href="/static/styles/dashboard.css">
+    <!-- Ajustes específicos desta página -->
+    <link rel="stylesheet" href="/static/styles/config.css">
+</head>
+<body>
+
+<!-- TOPBAR IGUAL À DASHBOARD -->
+<header class="topbar">
+    <div class="brand">🛡 Aika Server</div>
+    <div class="status-group">
+        <div class="status-pill">
+            <span class="label">Servidor:</span>
+            <span id="srv-status" class="value">{{ server_status }}</span>
+        </div>
+        <div class="status-pill">
+            <span class="label">MySQL:</span>
+            <span id="mysql-status" class="value">{{ mysql_status }}</span>
+        </div>
+        <div class="status-pill">
+            <span class="label">Hora:</span>
+            <span id="server-time" class="value">{{ server_time }}</span>
+        </div>
+        <!-- Já estamos na página de Config, mas o botão pode ficar destacado ou desativado depois -->
+        <a href="/config" class="config-btn" style="border-color: var(--accent); color: var(--accent);">
+            Configuração
+        </a>
+    </div>
+</header>
+
+<div class="container">
+
+    <!-- Card envolvendo tudo -->
+    <div class="card">
+        <div class="card-header">
+            <h2>Configuração do Servidor - AIKA PYTHON</h2>
+        </div>
+        <div class="card-body">
+
+            <!-- Abas -->
+            <div class="tabs">
+                <a href="/" class="tab">Home</a>
+                <div class="tab active" data-tab="Server">Server</div>
+                <div class="tab" data-tab="MySQL">MySQL</div>
+                <div class="tab" data-tab="Asaas">ASAAS TOKEN</div>
+                <div class="tab" data-tab="GameConf">Game Server Conf</div>
+                <div class="tab" data-tab="MSSQL">MSSQL</div>
+                <div class="tab" data-tab="Editor">Master Editor</div>
+            </div>
+
+            <!-- Server -->
+            <div id="Server" class="tab-content active">
+                <div class="config-group">
+                    <div class="config-item">
+                        <label>Version</label>
+                        <input type="text" class="input" name="Version" value="{{ srv['Version'] }}">
+                    </div>
+                    <div class="config-item">
+                        <label>MAX_USERS</label>
+                        <input type="text" class="input" name="MAX_USERS" value="{{ srv['MAX_USERS'] }}">
+                    </div>
+                    <div class="config-item">
+                        <label>Channels</label>
+                        <input type="text" class="input" name="Channels" value="{{ srv['Channels'] }}">
+                    </div>
+                </div>
+            </div>
+
+            <!-- MySQL -->
+            <div id="MySQL" class="tab-content">
+                <div class="config-group">
+                    <div class="config-item"><label>Database</label><input type="text" class="input" name="Database" value="{{ mysql['Database'] }}"></div>
+                    <div class="config-item"><label>Server</label><input type="text" class="input" name="Server" value="{{ mysql['Server'] }}"></div>
+                    <div class="config-item"><label>Port</label><input type="text" class="input" name="Port" value="{{ mysql['Port'] }}"></div>
+                    <div class="config-item"><label>Username</label><input type="text" class="input" name="Username" value="{{ mysql['Username'] }}"></div>
+                    <div class="config-item"><label>Password</label><input type="password" class="input" name="Password" value="{{ mysql['Password'] }}"></div>
+                    <div class="config-item"><label>UsernameGM</label><input type="text" class="input" name="UsernameGM" value="{{ mysql['UsernameGM'] }}"></div>
+                    <div class="config-item"><label>PasswordGM</label><input type="password" class="input" name="PasswordGM" value="{{ mysql['PasswordGM'] }}"></div>
+                    <div class="config-item"><label>ServerGM</label><input type="text" class="input" name="ServerGM" value="{{ mysql['ServerGM'] }}"></div>
+                </div>
+            </div>
+
+            <!-- ASAAS -->
+            <div id="Asaas" class="tab-content">
+                <div class="config-group">
+                    <div class="config-item"><label>LINK</label><input type="text" class="input" name="LINK" value="{{ asaas['LINK'] }}"></div>
+                    <div class="config-item"><label>TOKEN</label><input type="text" class="input" name="TOKEN" value="{{ asaas['TOKEN'] }}"></div>
+                </div>
+            </div>
+
+            <!-- Game Conf -->
+            <div id="GameConf" class="tab-content">
+                <div class="config-group">
+                    <div class="config-item"><label>LEVEL_CAP</label><input type="text" class="input" name="LEVEL_CAP" value="{{ gs['LEVEL_CAP'] }}"></div>
+                    <div class="config-item"><label>MAX_PRAN_LEVEL</label><input type="text" class="input" name="MAX_PRAN_LEVEL" value="{{ gs['MAX_PRAN_LEVEL'] }}"></div>
+                </div>
+            </div>
+
+            <!-- MSSQL -->
+            <div id="MSSQL" class="tab-content">
+                <div class="config-group">
+                    <div class="config-item"><label>Database</label><input type="text" class="input" name="Database" value="{{ mssql['Database'] }}"></div>
+                    <div class="config-item"><label>Server</label><input type="text" class="input" name="Server" value="{{ mssql['Server'] }}"></div>
+                    <div class="config-item"><label>Username</label><input type="text" class="input" name="Username" value="{{ mssql['Username'] }}"></div>
+                    <div class="config-item"><label>Password</label><input type="password" class="input" name="Password" value="{{ mssql['Password'] }}"></div>
+                    <div class="config-item"><label>Provider</label><input type="text" class="input" name="Provider" value="{{ mssql['Provider'] }}"></div>
+                    <div class="config-item"><label>PacketSize</label><input type="text" class="input" name="PacketSize" value="{{ mssql['PacketSize'] }}"></div>
+                    <div class="config-item"><label>WorkstationID</label><input type="text" class="input" name="WorkstationID" value="{{ mssql['WorkstationID'] }}"></div>
+                </div>
+            </div>
+
+            <!-- Master Editor -->
+            <div id="Editor" class="tab-content">
+                <div class="config-group">
+                    <div class="config-item"><label>ClientPath</label><input type="text" class="input" name="ClientPath" value="{{ editor['ClientPath'] }}"></div>
+                </div>
+            </div>
+
+            <button class="btn btn-ok" style="margin-top:20px;">Salvar Configurações</button>
+
+        </div>
+    </div>
+
+</div>
+
+<!-- Script externo -->
+<script src="/static/scripts/config.js"></script>
+
+</body>
+</html>

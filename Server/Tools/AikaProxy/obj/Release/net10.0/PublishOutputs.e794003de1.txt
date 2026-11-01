@@ -1,0 +1,6 @@
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Bin\AikaProxy\AikaProxy.exe
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Bin\AikaProxy\AikaProxy.json
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Bin\AikaProxy\AikaProxy.dll
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Bin\AikaProxy\AikaProxy.deps.json
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Bin\AikaProxy\AikaProxy.runtimeconfig.json
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Bin\AikaProxy\AikaProxy.pdb

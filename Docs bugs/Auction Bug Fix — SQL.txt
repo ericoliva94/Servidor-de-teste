@@ -1,0 +1,44 @@
+o problema estava em SQL.pas, removi todos os abort e substitui por Exit; 
+
+apos isso refiz a tabela do navicat com o comando abaixo 
+
+
+
+
+DROP VIEW IF EXISTS vwauction_getactiveoffers;
+
+CREATE VIEW vwauction_getactiveoffers AS
+SELECT
+    a.AuctionId,
+    a.CharacterId,
+    c.name AS CharacterName,
+    DATE_ADD(a.RegisterDate, INTERVAL a.RegisterTime HOUR) AS ExpireDate,
+
+    a.SellingPrice,
+
+    i.item_id AS ItemId,
+    i.app AS ItemLookId,
+    i.identific AS IdentificableAddOns,
+
+    i.effect1_index AS EffectId_1,
+    i.effect2_index AS EffectId_2,
+    i.effect3_index AS EffectId_3,
+
+    i.effect1_value AS EffectValue_1,
+    i.effect2_value AS EffectValue_2,
+    i.effect3_value AS EffectValue_3,
+
+    i.min AS DurabilityMin,
+    i.max AS DurabilityMax,
+    i.refine AS Amount_Reinforce,
+    i.time AS ItemTime,
+
+    a.ItemType,
+    a.ItemLevel,
+    a.ReinforceLevel,
+
+    a.Active
+FROM auction a
+JOIN auction_items i ON i.id = a.auction_itemsId
+JOIN characters c ON c.id = a.CharacterId
+WHERE a.Active = 1;

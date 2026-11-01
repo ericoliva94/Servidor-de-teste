@@ -1,0 +1,11 @@
+O problema esta em 
+TPacketHandlers.MoveItemToReliquare
+
+
+esta usando isso 
+
+TempleSpace := Servers[Ch].GetFreeTempleSpace(TempleSpace.DevirID);
+
+como na verdade deveria usar isso 
+
+TempleSpace := Servers[Ch].GetFreeTempleSpace(Player.OpennedDevir);

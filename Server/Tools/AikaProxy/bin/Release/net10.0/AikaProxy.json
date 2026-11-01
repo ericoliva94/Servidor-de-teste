@@ -1,0 +1,8 @@
+{
+  "_comment": "listen = onde o cliente conecta (IP do SL.bin do cliente); target = onde o AikaServer escuta (IP do Bin\\SL.bin do servidor).",
+  "GapMs": 40,
+  "Routes": [
+    { "Listen": "127.0.0.1:8822", "Target": "127.0.0.11:8822" },
+    { "Listen": "127.0.0.2:8822", "Target": "127.0.0.12:8822" }
+  ]
+}

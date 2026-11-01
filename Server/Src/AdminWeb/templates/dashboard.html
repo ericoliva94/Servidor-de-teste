@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Aika Server — Painel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- CSS -->
+  <link rel="stylesheet" href="/static/styles/dashboard.css" />
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">🛡 Aika Server</div>
+  <div class="status-group">
+    <div class="status-pill">
+      <span class="label">Servidor:</span>
+      <span id="srv-status" class="value">{{ server_status }}</span>
+    </div>
+    <div class="status-pill">
+      <span class="label">MySQL:</span>
+      <span id="mysql-status" class="value">{{ mysql_status }}</span>
+    </div>
+    <div class="status-pill">
+      <span class="label">Hora:</span>
+      <span id="server-time" class="value">{{ server_time }}</span>
+    </div>
+    <a href="/config" class="btn btn-ghost config-btn">⚙ Configuração</a>
+  </div>
+</header>
+
+  <main class="container">
+    <!-- Controles -->
+    <section class="card controls">
+      <div class="card-header">
+        <h2>Controles do Servidor</h2>
+      </div>
+        <div class="card-body row gap">
+            <button class="btn btn-ok" onclick="controlServer('start')">Ligar</button>
+            <button class="btn btn-warn" onclick="controlServer('restart')">Reiniciar</button>
+            <button class="btn btn-danger" onclick="controlServer('stop')">Desligar</button>
+        </div>
+    </section>
+
+    <!-- Menu de gestão -->
+    <section class="card actions">
+      <div class="card-header">
+        <h2>Gestão Rápida</h2>
+      </div>
+      <div class="card-body row wrap gap">
+        <a class="btn btn-ghost" href="#" onclick="alert('Gestão de contas — integrar')">Gerenciar Contas</a>
+        <a class="btn btn-ghost" href="#" onclick="alert('Gestão de itens — integrar')">Gerenciar Itens</a>
+        <a class="btn btn-ghost" href="#" onclick="alert('Gestão de NPCs — integrar')">Gerenciar NPCs</a>
+        <a class="btn btn-ghost" href="#" onclick="alert('Gestão de Leilão — integrar')">Gerenciar Leilão</a>
+        <a class="btn btn-ghost" href="#" onclick="alert('Gestão de Guilds — integrar')">Gerenciar Guilds</a>
+        <a class="btn btn-ghost" href="#" onclick="alert('Loja de Cash — integrar')">Gerenciar Loja de Cash</a>
+      </div>
+    </section>
+
+    <!-- Players por nação -->
+    <section class="grid-3">
+      <div class="card">
+        <div class="card-header"><h2>Exion</h2></div>
+        <div class="card-body">
+          <table class="table">
+            <thead><tr><th>Login</th><th>Personagem</th><th>IP</th></tr></thead>
+            <tbody id="tbody-exion"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2>Lenaria</h2></div>
+        <div class="card-body">
+          <table class="table">
+            <thead><tr><th>Login</th><th>Personagem</th><th>IP</th></tr></thead>
+            <tbody id="tbody-lenaria"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2>Ostyrion</h2></div>
+        <div class="card-body">
+          <table class="table">
+            <thead><tr><th>Login</th><th>Personagem</th><th>IP</th></tr></thead>
+            <tbody id="tbody-ostyrion"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chat e Log (lado a lado) -->
+    <section class="grid-2">
+      <div class="card">
+        <div class="card-header row between">
+          <h2>Chat do Jogo</h2>
+          <div class="tabs">
+            <button class="tab active" data-nation="all" onclick="switchChatTab(this)">Todos</button>
+            <button class="tab" data-nation="exion" onclick="switchChatTab(this)">Exion</button>
+            <button class="tab" data-nation="lenaria" onclick="switchChatTab(this)">Lenaria</button>
+            <button class="tab" data-nation="ostyrion" onclick="switchChatTab(this)">Ostyrion</button>
+          </div>
+        </div>
+        <div id="chat-box" class="log-box"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header row between">
+          <h2>Log do Console</h2>
+          <div>
+          </div>
+        </div>
+        <div class="card">
+            <div class="card-header row between">
+                <h2>Logs dos Servidores</h2>
+                    <div class="tabs">
+                        <button class="tab active" data-log="gameserver" onclick="switchLogTab(this)">GameServer</button>
+                        <button class="tab" data-log="tokenserver" onclick="switchLogTab(this)">TokenServer</button>
+                        <button class="tab" data-log="loginserver" onclick="switchLogTab(this)">LoginServer</button>
+                    </div>
+            </div>
+                <div id="console-gameserver" class="log-box active"></div>
+                <div id="console-tokenserver" class="log-box" style="display:none;"></div>
+                <div id="console-loginserver" class="log-box" style="display:none;"></div>
+        </div>
+    </section>
+
+    <!-- Comandos (rodapé) -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Comandos</h2>
+      </div>
+      <div class="card-body row gap">
+        <input id="cmd-input" class="input" placeholder="Digite um comando… ex: reloadskill" />
+        <button class="btn btn-ok" onclick="sendCommand()">Enviar</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div>© Aika Python — Painel Admin</div>
+    <div id="uptime"></div>
+  </footer>
+
+  <script src="/static/scripts/dashboard.js"></script>
+
+</body>
+</html>

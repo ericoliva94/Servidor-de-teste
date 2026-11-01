@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Registrar</title>
+<link rel="stylesheet" href="/static/styles/styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&display=swap" rel="stylesheet">
+
+</head>
+
+<body>
+
+  <div class="page-wrap">
+
+    <div class="card">
+      <div class="corner-bl"></div>
+      <div class="corner-br"></div>
+
+      <h1 class="title">Criar Conta</h1>
+
+      {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for m in messages %}
+          <div class="flash">{{ m }}</div>
+        {% endfor %}
+      {% endif %}
+      {% endwith %}
+
+      <form method="post" class="form">
+
+        <div>
+          <label class="label" for="username">Usuário</label>
+          <input class="input" id="username" name="username" maxlength="16" required>
+        </div>
+
+        <div>
+          <label class="label" for="email">E-mail</label>
+          <input class="input" id="email" type="email" name="email" required>
+        </div>
+
+        <div>
+          <label class="label" for="password">Senha</label>
+          <input class="input" id="password" type="password" name="password" minlength="6" required>
+        </div>
+
+        <button class="btn" type="submit">Registrar</button>
+      </form>
+
+      <a class="link" href="{{ url_for('login') }}">Já tem conta? Login →</a>
+
+    </div>
+
+  </div>
+
+</body>
+</html>

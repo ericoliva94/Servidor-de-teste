@@ -1,0 +1,15 @@
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\bin\Release\net10.0\AikaProxy.json
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\bin\Release\net10.0\AikaProxy.exe
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\bin\Release\net10.0\AikaProxy.deps.json
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\bin\Release\net10.0\AikaProxy.runtimeconfig.json
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\bin\Release\net10.0\AikaProxy.dll
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\bin\Release\net10.0\AikaProxy.pdb
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\obj\Release\net10.0\AikaProxy.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\obj\Release\net10.0\AikaProxy.AssemblyInfoInputs.cache
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\obj\Release\net10.0\AikaProxy.AssemblyInfo.cs
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\obj\Release\net10.0\AikaProxy.csproj.CoreCompileInputs.cache
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\obj\Release\net10.0\AikaProxy.dll
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\obj\Release\net10.0\refint\AikaProxy.dll
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\obj\Release\net10.0\AikaProxy.pdb
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\obj\Release\net10.0\AikaProxy.genruntimeconfig.cache
+C:\Users\erico\Downloads\AIKA SERVER\Aika Lore Community\Aika Lore Community\Server\Tools\AikaProxy\obj\Release\net10.0\ref\AikaProxy.dll
