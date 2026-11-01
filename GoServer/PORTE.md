@@ -42,8 +42,8 @@ de evidências.
 |---|---|---|---|
 | 1 | Módulo, tipos base (`Item`, `Position`, `ItemEffect`) | `MiscData.pas` | **pronto** |
 | 2 | Criptografia e enquadramento TCP | `EncDec.pas`, `PlayerThread.pas` | **pronto** |
-| 3 | Structs de pacote (~200) | `Packets.pas` (2.145) | a fazer |
-| 4 | Tabelas de dados (`.bin`) | `Load.pas` (2.719), `FilesData.pas` | a fazer |
+| 3 | Structs binárias: 319 records | `Packets.pas`, `PlayerData.pas`, `MiscData.pas`, `FilesData.pas`, `GuildData.pas`, `PartyData.pas`, `Entity*.pas` | **pronto** |
+| 4 | Leitura das tabelas `.bin` | `Load.pas` (2.719) | a fazer |
 | 5 | Acesso a MySQL | `SQL.pas`, `PlayerData.pas` | a fazer |
 | 6 | Entidades | `BaseMob.pas` (12.542), `Player.pas` (12.859), `MOB.pas`, `NPC.pas`, `PET.pas` | a fazer |
 | 7 | Handlers | `PacketHandlers.pas` (13.686), `NPCHandlers.pas`, `AuthHandlers.pas`, `CommandHandlers.pas` | a fazer |
@@ -53,6 +53,39 @@ de evidências.
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
+
+## O gerador (`gen/`)
+
+As 319 structs binárias não foram digitadas à mão: `gen/emit.py` lê as units
+Delphi, resolve os tipos entre elas e emite o Go. Digitar 2.145 linhas de
+`packed record` à mão erraria algum offset, e um offset errado num pacote é
+desincronização com o cliente.
+
+```bash
+cd GoServer/gen && python3 emit.py   # regenera internal/*/types_gen.go
+```
+
+O gerador calcula o `sizeof` do Delphi por conta própria, inclusive o
+alinhamento dos `record` sem `packed` (nesses ele emite campos `_ [n]byte`
+para o layout empacotado do Go casar com o da origem). A conta foi validada
+contra a única âncora independente que existe no código: `TQuestFromList`, que
+o `FilesData.pas` documenta como 2332 bytes e o `Load.pas` lê em blocos de
+`$91C` — o gerador chega aos mesmos 2332 sozinho.
+
+`gen/NAO_PORTADO.md` lista o que ele deliberadamente não gera: 5 records que
+contêm `TList`, classe ou string de tamanho variável. Esses não têm layout
+binário fixo nem no Delphi, então viram tipo nativo de Go (slice, ponteiro,
+`string`) nas fases seguintes.
+
+Dois achados do gerador que valem registro, porque não são óbvios:
+
+- **Padding só pode usar o identificador branco.** Um campo de alinhamento
+  chamado `_pad1` é não exportado e `binary.Read` tenta escrevê-lo por
+  reflexão, o que entra em pânico. Só o nome `_` é pulado. `binary.Size` não
+  detecta isso, por isso existe o teste de ida e volta.
+- **`Boolean` do Delphi virou `uint8`, não `bool`.** `binary.Read` aceita
+  qualquer byte num `bool` do Go, mas `binary.Write` devolve `0x01`: um pacote
+  que o servidor ecoa de volta sairia alterado. `uint8` preserva o byte.
 
 ## Divergências do original
 
