@@ -46,7 +46,7 @@ de evidências.
 | 4 | Leitura das tabelas `.bin` | `Load.pas` (2.719) | **pronto** (16 tabelas; CSV de drop/quest pendente) |
 | 5 | Acesso a MySQL | `SQL.pas` | **pronto** |
 | 6a | Núcleo de entidade: buffs, cooldown, visíveis, alvos | `BaseMob.pas` | **pronto** |
-| 6b | Combate, skills, dano | `BaseMob.pas`, `MOB.pas` | a fazer |
+| 6b | Combate: sorteio de tipo de dano, aritmética com limite | `BaseMob.pas`, `Util.pas` | **parcial** (tipo de dano pronto; pipeline de dano a fazer) |
 | 6c | Jogador, NPC, pet | `Player.pas` (12.859), `NPC.pas`, `PET.pas` | a fazer |
 | 7 | Handlers | `PacketHandlers.pas` (13.686), `NPCHandlers.pas`, `AuthHandlers.pas`, `CommandHandlers.pas` | a fazer |
 | 8 | Sistemas | itens/refino, dungeon, guild, party, mail, auction, nation, eventos, ranked | a fazer |
@@ -116,6 +116,10 @@ caem exatamente nos offsets 0 e 64 de cada registro de 464 bytes, e o item 10
 Não portado por não fazer nada no servidor atual. Fica registrado aqui para
 que a ausência seja uma decisão, e não um esquecimento.
 
+**`Util.IntMV`** (`Util.pas:11` e `84`) — declarada na interface, com corpo
+vazio (só um comentário `//if()`) e sem atribuir `Result`, então devolve lixo.
+Nunca é chamada.
+
 **`TPrediction`** (`BaseMob.pas:8-18`, implementação em `12503-12540`) — a
 interpolação de posição de mob. `SetDestination` escreve nela, mas o único
 leitor, `TBaseMob.CurrentPosition`, está **inteiramente dentro de um bloco
@@ -131,6 +135,26 @@ nenhum. Dois bugs ficaram dormentes aí dentro:
 
 Se a interpolação for reativada algum dia, os dois precisam de decisão de
 projeto — não de tradução.
+
+## Aritmética com limite: a pegadinha do `Dec`
+
+`Util.pas` declara `Dec` e `Inc` sobrepondo os intrínsecos do Delphi para
+`Word`, `Byte` e `Int64`. O efeito é que `Dec(X, N)` no código original
+**limita em zero** — mas só para esses tipos. Para `Cardinal` não existe
+sobrecarga, o intrínseco entra e o estouro é silencioso: `100 - 500` num
+`Cardinal` vira 4.294.966.896.
+
+Traduzir isso errado troca "fica em zero" por "vira 4 bilhões", que num campo
+de ouro ou cash é exploit. `internal/num` tem uma função por semântica, com o
+nome dizendo qual é qual — inclusive as duas que a origem chama igual:
+
+| `Util.pas` | `internal/num` | Comportamento |
+|---|---|---|
+| `DecInt` | `num.DecInt` | limita em zero |
+| `Dec(var x: integer)` | `num.DecIntRaw` | **não** limita, fica negativo |
+| `Dec(var x: Word)`, `DecWORD` | `num.DecWord` | limita em `[0, 65535]` |
+| `Dec(var x: Byte)` | `num.DecByte` | limita em `[0, 255]` |
+| `Dec(X, N)` com `Cardinal` | `num.DecCardinal` | limita em zero (a origem estoura) |
 
 ## Divergências do original
 
