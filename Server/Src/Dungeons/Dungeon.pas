@@ -120,6 +120,7 @@ var
   AddBuff: boolean;
   Deftarget, DANO, DamageReduction, PlayerHP: INTEGER;
 begin
+  DANO := 0;
 
 
 
@@ -144,8 +145,11 @@ begin
       Packet.TargetID := Self.AttackerID;
       Packet.MobAnimation := 26;
 
-    var AttackerIDs := Servers[Self.Base.ChannelId].Players[Self.AttackerID];
-    var PlayerBase := AttackerIDs.Base;
+    if (Self.AttackerID > MAX_CONNECTIONS) then
+      Exit;
+
+    var AttackerIDs: PPlayer := @Servers[Self.Base.ChannelId].Players[Self.AttackerID];
+    var PlayerBase: PBaseMob := @AttackerIDs.Base;
     PlayerHP := PlayerBase.PlayerCharacter.Base.CurrentScore.CurHP;
 
     if Attackerids.Base.IsDead then
@@ -220,6 +224,8 @@ begin
     DamageReduction := (DANO div 100) * (AttackerIDs.Base.GetEquipedItensDamageReduce div 10);
     Dec(DANO, DamageReduction);
     Inc(DANO, (RandomRange(10, 39) + 7));
+    if (DANO < 0) then
+      DANO := 1;
 
     var AttackResultType := RandomRange(1, 101);
       case AttackResultType of
@@ -233,7 +239,7 @@ begin
     if (SecondsBetween(Now, PlayerBase.RevivedTime) <= 7) then
       Exit;
 
-    Self.Base.AttackParseForMobs(0, 0, @PlayerBase, DANO, dnType, AddBuff, Packet.MobAnimation);
+    Self.Base.AttackParseForMobs(0, 0, PlayerBase, DANO, dnType, AddBuff, Packet.MobAnimation);
 
     Packet.dnType := dnType;
     Packet.DANO := DANO;
@@ -261,6 +267,7 @@ begin
                                 if(Servers[Self.Base.ChannelId].Players[Self.AttackerID].Party.Members.Count = 1) then
                                 begin
                                   // deve tá removendo o player depois que morre automatico, sla
+                                  var InstanceToClose := AttackerIDs.DungeonInstanceID;
                                   AttackerIDS.base.VisibleMobs.Clear;
                                   AttackerIDS.base.VisibleNPCS.Clear;
                                   AttackerIDS.base.VisiblePlayers.Clear;
@@ -272,14 +279,18 @@ begin
                                   Servers[Self.Base.ChannelId].Players[Self.AttackerID].InDungeon := False;
 
 
-                                        DungeonInstances[AttackerIds.DungeonInstanceID].InstanceOnline := False;
-                                              DungeonInstances[AttackerIds.DungeonInstanceID].Index := 0;
-                                              DungeonInstances[AttackerIds.DungeonInstanceID].CreateTime := Now;
-                                              DungeonInstances[AttackerIds.DungeonInstanceID].Party := nil;
-                                              DungeonInstances[AttackerIds.DungeonInstanceID].DungeonID := 0;
-                                              DungeonInstances[AttackerIds.DungeonInstanceID].Dificult := 0;
-                                              ZeroMemory(@DungeonInstances[AttackerIds.DungeonInstanceID].MOBS,
-                                              sizeof(DungeonInstances[AttackerIds.DungeonInstanceID].MOBS));
+                                        if (InstanceToClose >= Low(DungeonInstances)) and
+                                           (InstanceToClose <= High(DungeonInstances)) then
+                                        begin
+                                              DungeonInstances[InstanceToClose].InstanceOnline := False;
+                                              DungeonInstances[InstanceToClose].Index := 0;
+                                              DungeonInstances[InstanceToClose].CreateTime := Now;
+                                              DungeonInstances[InstanceToClose].Party := nil;
+                                              DungeonInstances[InstanceToClose].DungeonID := 0;
+                                              DungeonInstances[InstanceToClose].Dificult := 0;
+                                              ZeroMemory(@DungeonInstances[InstanceToClose].MOBS,
+                                              sizeof(DungeonInstances[InstanceToClose].MOBS));
+                                        end;
                                    Servers[Self.Base.ChannelId].Players[Self.AttackerID].IsInsideDungeon := true;
 
                                     Servers[Self.Base.ChannelId].Players[Self.AttackerID].Teleport(TPosition.Create(3399, 564));
@@ -354,7 +365,7 @@ begin
   // A otimização ocorre aqui, evitando acessar "Self.Base.VisibleMobs" repetidamente
   for i in Self.Base.VisibleMobs do
   begin
-    if (i <= MAX_CONNECTIONS) then
+    if (i >= 1) and (i <= MAX_CONNECTIONS) then
     begin
       with Servers[Self.Base.ChannelId].Players[i] do
       begin
@@ -394,6 +405,8 @@ var
   Rand: Integer;
 begin
   SelfParty := DungeonInstances[Self.InstanceID].Party;
+  if (SelfParty = nil) then
+    Exit;
 
 
 
@@ -669,14 +682,14 @@ begin
     begin
       with DungeonInstances[Self.InstanceID].MOBS[i] do
       begin
-        var moblocalplayer := Servers[Self.ChannelId].Players[AttackerID];
-
-        if AttackerID = 0 then
+        if (AttackerID = 0) or (AttackerID > MAX_CONNECTIONS) then
         begin
     //    AttackerID:= DungeonInstances[Self.InstanceID].Party.Leader;
     //    moblocalplayer := Servers[Self.ChannelId].Players[DungeonInstances[Self.InstanceID].Party.Leader];
         Continue;
         end;
+
+        var moblocalplayer: PPlayer := @Servers[Self.ChannelId].Players[AttackerID];
 
         if (Base.ClientID = 0) then
           continue;

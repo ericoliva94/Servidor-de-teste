@@ -1371,6 +1371,7 @@ begin
       ItemAmount := MySQLComp.Query.RecordCount;
       MySQLComp.Query.First;
       for i := 0 to (ItemAmount-1) do
+      begin
       if MySQLComp.Query.FieldByName('buff_index').AsInteger = 0 then
       begin
         MySQLComp.Query.Next;
@@ -1394,6 +1395,7 @@ begin
         );
 
       MySQLComp.Query.Next;
+      end;
 
 
 
@@ -8226,6 +8228,7 @@ procedure TPlayer.AddPranLevel(PranSlot: BYTE; Value: WORD);
  helper: Integer;
  baseSkillPran: WORD;
 begin
+  baseSkillPran := 0;
   case PranSlot of
     0:
       begin

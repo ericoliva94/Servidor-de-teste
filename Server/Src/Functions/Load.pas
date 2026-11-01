@@ -384,10 +384,11 @@ begin
     Exit;
   end;
   f := TFileStream.Create(FName, FmOpenRead);
-  Len := Trunc(f.Size / sizeof(TItemChanceReinforce));
+  Len := f.Size div sizeof(TItemChanceReinforce);
   try
     SetLength(ReinforceW01, Len);
-    f.ReadBuffer(ReinforceW01[0], f.Size);
+    if (Len > 0) then
+      f.ReadBuffer(ReinforceW01[0], Int64(Len) * SizeOf(ReinforceW01[0]));
     Logger.Write('ReinforceW01.bin carregado com sucesso.',
       TLogType.ServerStatus);
   finally
@@ -407,10 +408,11 @@ begin
     Exit;
   end;
   f := TFileStream.Create(FName, FmOpenRead);
-  Len := Trunc(f.Size / sizeof(TItemChanceReinforce));
+  Len := f.Size div sizeof(TItemChanceReinforce);
   try
     SetLength(ReinforceA01, Len);
-    f.ReadBuffer(ReinforceA01[0], f.Size);
+    if (Len > 0) then
+      f.ReadBuffer(ReinforceA01[0], Int64(Len) * SizeOf(ReinforceA01[0]));
     Logger.Write('ReinforceA01.bin carregado com sucesso.',
       TLogType.ServerStatus);
   finally
@@ -433,7 +435,8 @@ begin
   FLength := f.Size div sizeof(ArmorAttributeReinforce);
   SetLength(Reinforce3, FLength);
   try
-    f.ReadBuffer(Reinforce3[0], f.Size);
+    if (FLength > 0) then
+      f.ReadBuffer(Reinforce3[0], Int64(FLength) * SizeOf(Reinforce3[0]));
   finally
     f.Free;
     Logger.Write('Reinforce3.bin carregado com sucesso.',
@@ -456,7 +459,8 @@ begin
   FLength := f.Size div sizeof(TItemAttributeReinforce);
   SetLength(Reinforce2, FLength);
   try
-    f.ReadBuffer(Reinforce2[0], f.Size);
+    if (FLength > 0) then
+      f.ReadBuffer(Reinforce2[0], Int64(FLength) * SizeOf(Reinforce2[0]));
   finally
     f.Free;
     Logger.Write('Reinforce2.bin carregado com sucesso.',
@@ -485,11 +489,12 @@ begin
   end;
   f := TFileStream.Create(FName, FmOpenRead);
   FSize := f.Size;
-  Len := Round(FSize div $178);
+  Len := FSize div $178;
   SetLength(PremiumItems, Len);
   try
     f.Position := 0;
-    f.ReadBuffer(PremiumItems[0], f.Size);
+    if (Len > 0) then
+      f.ReadBuffer(PremiumItems[0], Int64(Len) * SizeOf(PremiumItems[0]));
     f.Free;
   except
     f.Free;
@@ -511,11 +516,12 @@ begin
   end;
   f := TFileStream.Create(FName, FmOpenRead);
   FSize := f.Size;
-  Len := Round(FSize div $1A0);
+  Len := FSize div $1A0;
   SetLength(MobPos, Len);
   try
     f.Position := 0;
-    f.ReadBuffer(MobPos[0], f.Size);
+    if (Len > 0) then
+      f.ReadBuffer(MobPos[0], Int64(Len) * SizeOf(MobPos[0]));
     f.Free;
   except
     f.Free;
@@ -537,11 +543,12 @@ begin
   end;
   f := TFileStream.Create(FName, FmOpenRead);
   FSize := f.Size;
-  Len := Round(FSize div sizeof(UInt64));
+  Len := FSize div sizeof(UInt64);
   SetLength(ExpList, Len);
   try
     f.Position := 0;
-    f.ReadBuffer(ExpList[0], f.Size);
+    if (Len > 0) then
+      f.ReadBuffer(ExpList[0], Int64(Len) * SizeOf(ExpList[0]));
     f.Free;
   except
     f.Free;
@@ -563,11 +570,12 @@ begin
   end;
   f := TFileStream.Create(FName, FmOpenRead);
   FSize := f.Size;
-  Len := Round(FSize div sizeof(DWORD));
+  Len := FSize div sizeof(DWORD);
   SetLength(PranExpList, Len);
   try
     f.Position := 0;
-    f.ReadBuffer(PranExpList[0], f.Size);
+    if (Len > 0) then
+      f.ReadBuffer(PranExpList[0], Int64(Len) * SizeOf(PranExpList[0]));
     f.Free;
   except
     f.Free;
@@ -589,11 +597,12 @@ begin
   end;
   f := TFileStream.Create(FName, FmOpenRead);
   FSize := f.Size;
-  Len := Round(FSize div $91C);
+  Len := FSize div $91C;
   SetLength(Quests, Len);
   try
     f.Position := 0;
-    f.ReadBuffer(Quests[0], f.Size);
+    if (Len > 0) then
+      f.ReadBuffer(Quests[0], Int64(Len) * SizeOf(Quests[0]));
     f.Free;
   except
     f.Free;
@@ -1388,11 +1397,12 @@ begin
   end;
   f := TFileStream.Create(FName, FmOpenRead);
   FSize := f.Size;
-  Len := Round(FSize div sizeof(TRecipeData));
+  Len := FSize div sizeof(TRecipeData);
   SetLength(Recipes, Len);
   try
     f.Position := 0;
-    f.ReadBuffer(Recipes[0], f.Size);
+    if (Len > 0) then
+      f.ReadBuffer(Recipes[0], Int64(Len) * SizeOf(Recipes[0]));
     f.Free;
   except
     f.Free;
@@ -2692,11 +2702,12 @@ begin
   end;
   f := TFileStream.Create(FName, FmOpenRead);
   FSize := f.Size;
-  Len := Round(FSize div sizeof(TScrollTeleportPos));
+  Len := FSize div sizeof(TScrollTeleportPos);
   SetLength(ScrollTeleportPosition, Len);
   try
     f.Position := 0;
-    f.ReadBuffer(ScrollTeleportPosition[0], f.Size);
+    if (Len > 0) then
+      f.ReadBuffer(ScrollTeleportPosition[0], Int64(Len) * SizeOf(ScrollTeleportPosition[0]));
     f.Free;
   except
     f.Free;

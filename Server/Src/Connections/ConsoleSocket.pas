@@ -129,9 +129,9 @@ var
   s, p: Integer;
   ExecPlayer: PPlayer;
 begin
-  if Received > 200 then Exit;
   Received := recv(ClientSock, Buffer, SizeOf(Buffer), 0);
   if Received <= 0 then Exit;
+  if Received > 200 then Exit;
 
   SetString(FullCmd, PAnsiChar(@Buffer[0]), Received);
   FullCmd := Trim(FullCmd);
