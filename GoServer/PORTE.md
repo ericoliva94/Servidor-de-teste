@@ -7,11 +7,17 @@ o servidor falando o mesmo protocolo, byte a byte.
 Alvo medido na origem: **53 units compiladas, 85.116 linhas** de Object Pascal
 (contadas a partir de `Server/AikaServer.dproj`).
 
-## Como rodar os testes
+## Como rodar
 
 ```bash
-cd GoServer && go test ./...
+cd GoServer && go test ./...                      # a bateria inteira
+go run ./cmd/aikaserver -ini ../Server/Bin/AikaServer.ini   # sobe o login
+go run ./cmd/aikaserver -no-db                    # sobe sem banco, so para ver a carga
 ```
+
+O servidor abre a porta 8831, carrega as 16 tabelas `.bin` de
+`Server/Bin/Data` e atende o pacote `$81` validando o token contra a tabela
+`accounts`. As demais portas entram na fase 10b.
 
 ## Regras do porte
 
@@ -51,7 +57,8 @@ de evidências.
 | 7 | Handlers | `PacketHandlers.pas` (13.686), `NPCHandlers.pas`, `AuthHandlers.pas`, `CommandHandlers.pas` | a fazer |
 | 8 | Sistemas | itens/refino, dungeon, guild, party, mail, auction, nation, eventos, ranked | a fazer |
 | 9 | Laços de atualização | `UpdateThreads.pas` (3.942) | a fazer |
-| 10 | Servidores e `main` | `ServerSocket.pas`, `LoginSocket.pas`, `TokenSocket.pas`, `ConsoleSocket.pas` | a fazer |
+| 10a | Servidor TCP, login e `main` que sobe | `LoginSocket.pas`, `AuthHandlers.pas` | **pronto** |
+| 10b | Canais, token HTTP, console | `ServerSocket.pas`, `TokenSocket.pas`, `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
