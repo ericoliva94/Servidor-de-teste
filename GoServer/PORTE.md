@@ -44,8 +44,10 @@ de evidências.
 | 2 | Criptografia e enquadramento TCP | `EncDec.pas`, `PlayerThread.pas` | **pronto** |
 | 3 | Structs binárias: 319 records | `Packets.pas`, `PlayerData.pas`, `MiscData.pas`, `FilesData.pas`, `GuildData.pas`, `PartyData.pas`, `Entity*.pas` | **pronto** |
 | 4 | Leitura das tabelas `.bin` | `Load.pas` (2.719) | **pronto** (16 tabelas; CSV de drop/quest pendente) |
-| 5 | Acesso a MySQL | `SQL.pas`, `PlayerData.pas` | a fazer |
-| 6 | Entidades | `BaseMob.pas` (12.542), `Player.pas` (12.859), `MOB.pas`, `NPC.pas`, `PET.pas` | a fazer |
+| 5 | Acesso a MySQL | `SQL.pas` | **pronto** |
+| 6a | Núcleo de entidade: buffs, cooldown, visíveis, alvos | `BaseMob.pas` | **pronto** |
+| 6b | Combate, skills, dano | `BaseMob.pas`, `MOB.pas` | a fazer |
+| 6c | Jogador, NPC, pet | `Player.pas` (12.859), `NPC.pas`, `PET.pas` | a fazer |
 | 7 | Handlers | `PacketHandlers.pas` (13.686), `NPCHandlers.pas`, `AuthHandlers.pas`, `CommandHandlers.pas` | a fazer |
 | 8 | Sistemas | itens/refino, dungeon, guild, party, mail, auction, nation, eventos, ranked | a fazer |
 | 9 | Laços de atualização | `UpdateThreads.pas` (3.942) | a fazer |
@@ -108,6 +110,27 @@ Também confirmado contra dado real: `ItemList.bin` **não tem cabeçalho**. Os
 4 bytes de sobra estão no fim do arquivo, não no início — os nomes dos itens
 caem exatamente nos offsets 0 e 64 de cada registro de 464 bytes, e o item 10
 é `WarriorFace1` no byte 4640 = 10 × 464. Isso está travado por teste.
+
+## Código morto encontrado na origem
+
+Não portado por não fazer nada no servidor atual. Fica registrado aqui para
+que a ausência seja uma decisão, e não um esquecimento.
+
+**`TPrediction`** (`BaseMob.pas:8-18`, implementação em `12503-12540`) — a
+interpolação de posição de mob. `SetDestination` escreve nela, mas o único
+leitor, `TBaseMob.CurrentPosition`, está **inteiramente dentro de um bloco
+comentado** (`1506-1528`), e `SetDestination` em si não é chamado de lugar
+nenhum. Dois bugs ficaram dormentes aí dentro:
+
+- `Elapsed` devolve `Timer.ElapsedTicks` (ticks de alta resolução) mas `ETA` é
+  calculado em milissegundos, então `Delta = Elapsed/ETA` estoura e
+  `Interpolate` sempre devolve o destino direto.
+- `CalcETA` faz `speed := speed * 190` com `speed: Byte`: para qualquer
+  velocidade acima de 1 o valor trunca em 256. Com `speed = 25` (o usado em
+  `MobMove`), `25*190 = 4750` vira 142.
+
+Se a interpolação for reativada algum dia, os dois precisam de decisão de
+projeto — não de tradução.
 
 ## Divergências do original
 
