@@ -21,6 +21,9 @@ tabelas `.bin` de `Server/Bin/Data` e atende:
 - `$81` no login: valida o token contra `accounts` e responde `$82`.
 - `$685` no canal: valida conta e token, lê os 3 personagens de `characters`
   e responde a lista em `$901`.
+- HTTP na **8090**: `/member/aika_get_token.asp` gera o token e grava em
+  `accounts`, mais as rotas de contagem de personagens, lista de servidores e
+  reset de flag. É o que o launcher chama antes de conectar.
 
 ## Regras do porte
 
@@ -62,7 +65,8 @@ de evidências.
 | 9 | Laços de atualização | `UpdateThreads.pas` (3.942) | a fazer |
 | 10a | Servidor TCP, login e `main` que sobe | `LoginSocket.pas`, `AuthHandlers.pas` | **pronto** |
 | 10b | Canal 8822: `CheckLogin` e lista de personagens | `ServerSocket.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** |
-| 10c | Token HTTP, console, entrada no mundo | `TokenSocket.pas`, `ConsoleSocket.pas` | a fazer |
+| 10c | Token HTTP 8090 | `TokenSocket.pas`, `AuthHandlers.pas` | **pronto** |
+| 10d | Console, entrada no mundo, movimento | `ConsoleSocket.pas`, `Player.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -183,6 +187,13 @@ descontado três vezes do golpe (300 − 30 − 30 − 30 = 210).
 
 **A posição 0 da roleta de dano nunca sai.** `RandomRange(1, total+1)` sorteia
 em `[1, total]`, embora a posição 0 seja pintada pela primeira chance.
+
+**O token era derivado da senha e do segundo corrente.**
+`MD5(MD5(senha) + MD5(DateTimeToStr(Now)))` tem resolução de segundo, então
+dois pedidos no mesmo segundo com a mesma senha davam o **mesmo token**, e o
+valor era previsível para quem soubesse o hash. O cliente trata o token como
+texto opaco de 32 caracteres e só o devolve, então o porte usa bytes
+aleatórios: transparente na rede e estritamente mais seguro.
 
 **Nível do personagem vai como `Level - 1` na lista.** `SendCharList` manda
 `Account.Characters[i].Base.Level - 1`. Num slot vazio (`Level = 0`) isso

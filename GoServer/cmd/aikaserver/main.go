@@ -24,6 +24,7 @@ import (
 	"aika/internal/gamedata"
 	"aika/internal/netsrv"
 	"aika/internal/store"
+	"aika/internal/tokensrv"
 )
 
 func main() {
@@ -74,6 +75,7 @@ func run() error {
 	var (
 		accounts auth.Accounts
 		chars    game.Characters
+		tokens   tokensrv.Store
 	)
 	if *skipDB {
 		log.Warn("subindo sem banco: nenhum login sera aceito")
@@ -94,7 +96,9 @@ func run() error {
 		defer db.Close()
 		log.Info("mysql conectado",
 			"servidor", cfg.MySQLServer, "porta", cfg.MySQLPort, "banco", cfg.MySQLDatabase)
-		accounts = store.Accounts{DB: db}
+		accs := store.Accounts{DB: db}
+		accounts = accs
+		tokens = accs
 		chars = store.Characters{DB: db}
 	}
 
@@ -125,20 +129,45 @@ func run() error {
 			return err
 		}
 	}
-	log.Info("servidor pronto",
-		"login", loginSrv.Addr().String(),
-		"canal", channelSrv.Addr().String())
 
-	// Um erro em qualquer uma das portas encerra as duas.
-	errc := make(chan error, 2)
+	// O servidor de token so sobe com banco: ele existe para gravar o token
+	// em accounts, e sem escrita nao faz nada util.
+	var tokenSrv *tokensrv.Server
+	if tokens != nil {
+		tokenSrv = tokensrv.New(tokensrv.Config{
+			Addr: cfg.TokenAddr,
+			Log:  log,
+		}, tokens, onlineCounter{loginSrv: loginSrv, channelSrv: channelSrv})
+		if err := tokenSrv.Listen(); err != nil {
+			return err
+		}
+	}
+
+	campos := []any{
+		"login", loginSrv.Addr().String(),
+		"canal", channelSrv.Addr().String(),
+	}
+	if tokenSrv != nil {
+		campos = append(campos, "token", tokenSrv.Addr().String())
+	}
+	log.Info("servidor pronto", campos...)
+
+	// Um erro em qualquer uma das portas encerra as outras.
 	ctx, cancelAll := context.WithCancel(ctx)
 	defer cancelAll()
+
+	tarefas := 2
+	errc := make(chan error, 3)
 	for _, srv := range []*netsrv.Server{loginSrv, channelSrv} {
 		go func(s *netsrv.Server) { errc <- s.Serve(ctx) }(srv)
 	}
+	if tokenSrv != nil {
+		tarefas++
+		go func() { errc <- tokenSrv.Serve(ctx) }()
+	}
 
 	var firstErr error
-	for range 2 {
+	for range tarefas {
 		if err := <-errc; err != nil && !errors.Is(err, context.Canceled) {
 			if firstErr == nil {
 				firstErr = err
@@ -148,6 +177,17 @@ func run() error {
 	}
 	log.Info("servidor encerrado")
 	return firstErr
+}
+
+// onlineCounter informa quantos jogadores estao conectados, somando as duas
+// portas, para a rota de lista de servidores do token.
+type onlineCounter struct {
+	loginSrv   *netsrv.Server
+	channelSrv *netsrv.Server
+}
+
+func (o onlineCounter) OnlinePlayers() int {
+	return int(o.channelSrv.Conns())
 }
 
 // noChars devolve lista vazia. Usado com -no-db.

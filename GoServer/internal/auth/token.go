@@ -30,13 +30,25 @@ const StatusBanned = 8
 
 // Account e o que o login precisa saber da conta.
 type Account struct {
-	ID           uint32
-	Username     string
+	ID       uint32
+	Username string
+	// PasswordHash e a coluna password_hash: o MD5 minusculo que o cliente
+	// manda. Conferido em LoadAccountSQL de Player.pas.
+	PasswordHash string
 	Token        string
 	TokenCreated time.Time
 	Status       uint8
 	Nation       uint8
+	// BanDays e a duracao da suspensao; zero significa permanente.
+	BanDays int
 }
+
+// Codigos de AccountStatus usados pelo servidor de token, de AikaGetToken.
+const (
+	StatusOK        = 0
+	StatusCancelled = 2
+	StatusNotCBT    = 10
+)
 
 // Accounts busca contas. Implementado por internal/store contra o MySQL e
 // por um dublê nos testes.
