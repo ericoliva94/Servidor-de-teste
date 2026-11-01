@@ -1609,6 +1609,8 @@ var
   CurrentCnt: Int64;
   SQLComp: TQuery;
 begin
+  Result := 0;
+  CurrentCnt := 0;
   SQLComp := TQuery.Create(AnsiString(MYSQL_SERVER), MYSQL_PORT,
     AnsiString(MYSQL_USERNAME), AnsiString(MYSQL_PASSWORD),
     AnsiString(MYSQL_DATABASE));
@@ -1653,6 +1655,8 @@ var
   CurrentCnt: Int64;
   SQLComp: TQuery;
 begin
+  Result := 0;
+  CurrentCnt := 0;
   SQLComp := TQuery.Create(AnsiString(MYSQL_SERVER), MYSQL_PORT,
     AnsiString(MYSQL_USERNAME), AnsiString(MYSQL_PASSWORD),
     AnsiString(MYSQL_DATABASE));

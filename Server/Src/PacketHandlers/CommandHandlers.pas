@@ -318,39 +318,37 @@ var
 begin
   if (Data.Count = 3) then
   begin
-    try
-      if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
-      then
-      begin
-        Player.SendClientMessage('Jogador não encontrado.');
-        Exit;
-      end;
-
-      try
-        Index := Data[1].ToInteger;
-
-        case Index of
-          20038, 20039, 20040, 20041:
-            begin
-              Player.SendClientMessage('Itens banidos.');
-              Exit;
-            end;
-        end;
-
-        if (Data.Count = 2) then
-        begin
-          Quanty := 1;
-        end
-        else if (Data.Count = 3) then
-        begin
-          Quanty := Data[2].ToInteger;
-        end;
-      except
-        Exit;
-      end;
-    finally
-      TItemFunctions.PutItem(OtherPlayer^, Index, Quanty);
+    if not(Servers[Player.ChannelIndex].GetPlayerByName(Data[0], OtherPlayer))
+    then
+    begin
+      Player.SendClientMessage('Jogador não encontrado.');
+      Exit;
     end;
+
+    try
+      Index := Data[1].ToInteger;
+
+      case Index of
+        20038, 20039, 20040, 20041:
+          begin
+            Player.SendClientMessage('Itens banidos.');
+            Exit;
+          end;
+      end;
+
+      if (Data.Count = 2) then
+      begin
+        Quanty := 1;
+      end
+      else if (Data.Count = 3) then
+      begin
+        Quanty := Data[2].ToInteger;
+      end;
+    except
+      Exit;
+    end;
+
+    TItemFunctions.PutItem(OtherPlayer^, Index, Quanty);
 
     Exit;
   end;

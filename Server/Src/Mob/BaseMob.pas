@@ -4053,7 +4053,7 @@ begin
   begin
     if (Index = SkillData[i].Index) then
     begin
-      Result := id;
+      Result := i;
       break;
     end;
   end;
@@ -4894,6 +4894,7 @@ var
 begin
   ZeroMemory(@RamdomArray, 1000);
   Randomize;
+  AllChance := 0;
 {$REGION 'Seta a chance basica dos tipos de dano'}
   if (IsPhysical) then
     Chance := 20
@@ -6332,6 +6333,7 @@ var
 begin // aqui ser� a fun��o que verificar� quest e dar� drop/exp
   ExpAcquired := 0;
   PranExpAcquired := 0;
+  CalcAuxRlq := 0;
   SelfPlayer := @Servers[Self.ChannelId].Players[Self.ClientID];
 
   if (mob^.ClientID <= MAX_CONNECTIONS) then
@@ -8431,6 +8433,8 @@ begin
       begin
         Packet.TargetID := NewMob^.ClientID;
         Resisted := False;
+        Dano := 0;
+        Add_Buff := False;
         case DataSkill^.Classe of
           1, 2: // warrior skill
             begin
@@ -8604,6 +8608,8 @@ begin
             Inc(cnt);
             Packet.TargetID := NewMob^.ClientID;
             Resisted := False;
+            Dano := 0;
+            Add_Buff := False;
             case DataSkill^.Classe of
               1, 2: // warrior skill
                 begin
@@ -8788,6 +8794,8 @@ begin
                   Inc(cnt);
                   Packet.TargetID := NewMob^.ClientID;
                   Resisted := False;
+                  Dano := 0;
+                  Add_Buff := False;
                   case DataSkill^.Classe of
                     1, 2: // warrior skill
                       begin
@@ -8929,6 +8937,8 @@ begin
                   Inc(cnt);
                   Packet.TargetID := NewMob^.ClientID;
                   Resisted := False;
+                  Dano := 0;
+                  Add_Buff := False;
                   case DataSkill^.Classe of
                     1, 2: // warrior skill
                       begin
@@ -9078,6 +9088,8 @@ begin
                 Inc(cnt);
                 Packet.TargetID := NewMob^.ClientID;
                 Resisted := False;
+                Dano := 0;
+                Add_Buff := False;
                 case DataSkill^.Classe of
                   1, 2: // warrior skill
                     begin
@@ -10469,7 +10481,7 @@ begin
       begin
         Servers[Self.ChannelId].MOBS.TMobS[Self.Mobid].MobsP[Self.SecondIndex].HP :=
          Servers[Self.ChannelId].MOBS.TMobS[Self.Mobid].MobsP[Self.SecondIndex].HP -
-         ((Dano div 100) * Help1);
+         ((Dano div 100) * Helper);
         Self.SendCurrentHPMPMob();
       end;
     end;
@@ -10670,6 +10682,7 @@ var
 begin
   // if (mob^.ClientID >= 3048) then
   // Exit; // mais pra frente setar aqui pra atacar eff5 em mobs tbm
+  Skill := 0;
   if (EffCount > 1) then
   begin // se tiver mais de 1 efeito 5 equipado, escolher entre eles
     ZeroMemory(@PList, 6);
@@ -10697,6 +10710,8 @@ begin
       end;
     end;
   end;
+  if (Skill = 0) then
+    Exit;
   ZeroMemory(@Packet, sizeof(Packet));
   Packet.Header.size := sizeof(Packet);
   Packet.Header.Index := Self.ClientID;
@@ -12525,4 +12540,3 @@ begin
 end;
 {$ENDREGION}
 end.
-rp{

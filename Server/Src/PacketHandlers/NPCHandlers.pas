@@ -3056,6 +3056,8 @@ begin
 
   LeaderGuild := @Guilds[Servers[Player.ChannelIndex].GetGuildSlotByID(xGuild.Ally.Leader)];
 
+  OldSlot := 0;
+
   ZeroMemory(@xGuild.Ally, sizeof(xGuild.Ally));
   xGuild.Ally.Leader := xGuild.Index;
   xGuild.Ally.Guilds[0].Index := xGuild.Index;
@@ -3078,16 +3080,19 @@ begin
     end;
   end;
 
-  ZeroMemory(@LeaderGuild.Ally.Guilds[OldSlot], sizeof(LeaderGuild.Ally.Guilds[OldSlot]));
-
-  if(OtherGuild2 <> nil) then
+  if(OldSlot > 0) then
   begin
-    ZeroMemory(@OtherGuild2.Ally.Guilds[OldSlot], sizeof(OtherGuild2.Ally.Guilds[OldSlot]));
-  end;
+    ZeroMemory(@LeaderGuild.Ally.Guilds[OldSlot], sizeof(LeaderGuild.Ally.Guilds[OldSlot]));
 
-  if(OtherGuild3 <> nil) then
-  begin
-    ZeroMemory(@OtherGuild3.Ally.Guilds[OldSlot], sizeof(OtherGuild3.Ally.Guilds[OldSlot]));
+    if(OtherGuild2 <> nil) then
+    begin
+      ZeroMemory(@OtherGuild2.Ally.Guilds[OldSlot], sizeof(OtherGuild2.Ally.Guilds[OldSlot]));
+    end;
+
+    if(OtherGuild3 <> nil) then
+    begin
+      ZeroMemory(@OtherGuild3.Ally.Guilds[OldSlot], sizeof(OtherGuild3.Ally.Guilds[OldSlot]));
+    end;
   end;
 
   for I := 0 to 127 do

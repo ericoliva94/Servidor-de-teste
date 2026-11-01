@@ -664,6 +664,9 @@ begin
     if (Packet.Content.ItemSlot[i] = $FF) then
       Continue;
 
+    if (Packet.Content.ItemSlot[i] > 63) then
+      Continue;
+
     Mail.CheckItem := True;
 
     Mail.Return := True;

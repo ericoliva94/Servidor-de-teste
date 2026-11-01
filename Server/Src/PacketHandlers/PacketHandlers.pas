@@ -2967,6 +2967,10 @@ begin
   begin
     Exit;
   end;
+  if (Packet.Slot > 63) then
+  begin
+    Exit;
+  end;
   BuyItem := Servers[Player.ChannelIndex].NPCs[Packet.Index].Character.Inventory
     [Packet.Slot];
   if (BuyItem.Index = 0) then
@@ -3116,6 +3120,9 @@ begin
     Exit;
   end;
 
+  if (Packet.Slot > 63) then
+    Exit;
+
   Item := @Player.Character.Base.Inventory[Packet.Slot];
 
   if TItemFunctions.CanAgroup(Item^) then
@@ -3231,11 +3238,21 @@ begin
   Result := False;
   case Packet.TypeSlot of
     EQUIP_TYPE:
-      Item := @Player.Character.Base.Equip[Packet.Slot];
+      begin
+        if (Packet.Slot > 15) then
+          Exit;
+        Item := @Player.Character.Base.Equip[Packet.Slot];
+      end;
     INV_TYPE:
-      Item := @Player.Character.Base.Inventory[Packet.Slot];
+      begin
+        if (Packet.Slot > 63) then
+          Exit;
+        Item := @Player.Character.Base.Inventory[Packet.Slot];
+      end;
     PRAN_INV_TYPE:
     begin
+      if (Packet.Slot > 41) then
+        Exit;
       case Player.SpawnedPran of
         0:
           Item := @Player.Account.Header.Pran1.Inventory[Packet.Slot];
@@ -3306,6 +3323,8 @@ begin
       end;
     INV_TYPE:
       begin
+        if (Packet.Slot > 63) then
+          Exit;
         srcItem := @Player.Character.Base.Inventory[Packet.Slot];
       end;
     STORAGE_TYPE:
@@ -3315,6 +3334,8 @@ begin
       end;
     PRAN_INV_TYPE:
       begin
+        if (Packet.Slot > 41) then
+          Exit;
         case Player.SpawnedPran of
           0:
             begin
@@ -3406,6 +3427,9 @@ var
   Packet: TAgroupItemPacket absolute Buffer;
   srcItem, destItem: pItem;
 begin
+  Result := False;
+  if (Packet.srcSlot > 63) or (Packet.destSlot > 63) then
+    Exit;
   srcItem := @Player.Character.Base.Inventory[Packet.srcSlot];
   destItem := @Player.Character.Base.Inventory[Packet.destSlot];
   if (srcItem.Index <> destItem.Index) then
@@ -4402,6 +4426,9 @@ begin
       Exit;
     end;
 
+    if(Packet.Trade.Slots[i] > 63) then
+      Continue;
+
     if(ItemList[Player.Base.Character.Inventory[Packet.Trade.Slots[i]].Index].TypeTrade > 0) then
     begin
       //Packet.Trade.Confirm := False;
@@ -4740,6 +4767,8 @@ begin
   Result := False;
   if (Player.Base.IsDead) then
     Exit;
+  if (Packet.Slot > 63) then
+    Exit;
   case Packet.TypeSlot of
     INV_TYPE:
     begin
@@ -4760,6 +4789,8 @@ begin
               if(Packet.Type1 > 16) then
               begin //reparar no invent
                 Packet.Type1 := Packet.Type1 -16;
+                if(Packet.Type1 > 63) then
+                  Exit;
 
                 if(TItemFunctions.GetItemEquipSlot(Player.Base.Character.Inventory[Packet.Type1].Index) = 6) then
                 begin
@@ -4790,6 +4821,8 @@ begin
               if(Packet.Type1 > 16) then
               begin //reparar no invent
                 Packet.Type1 := Packet.Type1 -16;
+                if(Packet.Type1 > 63) then
+                  Exit;
 
                 if(TItemFunctions.GetItemEquipSlot(Player.Base.Character.Inventory[Packet.Type1].Index) in
                   [2,3,4,5,7]) then
@@ -4803,6 +4836,8 @@ begin
               end
               else //reparar no equip
               begin
+                if(Packet.Type1 > 15) then
+                  Exit;
                 if(TItemFunctions.GetItemEquipSlot(Player.Base.Character.Equip[Packet.Type1].Index) in
                   [2,3,4,5,7]) then
                 begin
@@ -4841,6 +4876,8 @@ var
   i: Integer;
 begin
   Result := False;
+  if (Packet.Slot > 63) then
+    Exit;
 
   Item := @Player.Character.Base.Inventory[Packet.Slot];
 
@@ -4946,6 +4983,8 @@ var
   Item: pItem;
 begin
   Result := False;
+  if (Packet.Data > 63) then
+    Exit;
   Item := @Player.Character.Base.Inventory[Packet.Data];
   if (Item.Index = 0) then
     Exit;
@@ -7060,6 +7099,7 @@ var
   i, j, k: Byte;
   NewPartyID: WORD;
 begin
+  NewPartyID := 0;
   if(Player.Base.PartyId = 0) then
   begin
     Exit;
@@ -7094,8 +7134,9 @@ begin
         end;
       end;
     end;
-    Servers[Player.ChannelIndex].Parties[NewPartyID].RefreshRaid;
-    ZeroMemory(@Player.Party.PartyAllied[i], sizeof(Player.Party.PartyAllied[i]));
+    if (NewPartyID > 0) then
+      Servers[Player.ChannelIndex].Parties[NewPartyID].RefreshRaid;
+    ZeroMemory(@Player.Party.PartyAllied, sizeof(Player.Party.PartyAllied));
     Player.Party.InRaid := False;
     Player.Party.PartyRaidCount := 0;
     Player.Party.RaidPartyId := 0;
@@ -7126,8 +7167,9 @@ begin
         end;
       end;
     end;
-    Servers[Player.ChannelIndex].Parties[NewPartyID].RefreshRaid;
-    ZeroMemory(@Player.Party.PartyAllied[i], sizeof(Player.Party.PartyAllied[i]));
+    if (NewPartyID > 0) then
+      Servers[Player.ChannelIndex].Parties[NewPartyID].RefreshRaid;
+    ZeroMemory(@Player.Party.PartyAllied, sizeof(Player.Party.PartyAllied));
     Player.Party.InRaid := False;
     Player.Party.PartyRaidCount := 0;
     Player.Party.RaidPartyId := 0;
@@ -7223,6 +7265,12 @@ begin
     if(Packet.Shop.Products[i].Slot = $ffff) then
       Continue;
 
+    if(Packet.Shop.Products[i].Slot > 63) then
+    begin
+      Packet.Shop.Products[i].Slot := $ffff;
+      Continue;
+    end;
+
     if(ItemList[Player.Base.Character.Inventory
       [Packet.Shop.Products[i].Slot].Index].TypeTrade > 0) then
       Packet.Shop.Products[i].Slot := $ffff;
@@ -7303,6 +7351,8 @@ begin
       Player.SendClientMessage('Gold insuficiente.');
       Exit;
     end;
+    if (Packet.Product.Slot > 63) then
+      Exit;
     Player.DecGold(Packet.Product.Price);
     TItemFunctions.PutItem(Player, OtherPlayer.Character.Base.Inventory
       [Packet.Product.Slot]);
@@ -8672,6 +8722,8 @@ var
   i: Integer;
   SelfMemberID, TargetMemberId: Byte;
 begin
+  SelfMemberID := 255;
+  TargetMemberId := 255;
   if(Player.Base.Character.GuildIndex = 0) then
   begin
     Player.SendClientMessage('Você não está em uma guilda.');
@@ -8762,6 +8814,8 @@ begin
         SelfMemberId := i;
       end;
     end;
+    if (TargetMemberId = 255) or (SelfMemberId = 255) then
+      Exit;
     Guilds[Player.Character.GuildSlot].Members[TargetMemberId].Rank :=
      Guilds[Player.Character.GuildSlot].Members[SelfMemberId].Rank;
     Guilds[Player.Character.GuildSlot].Members[SelfMemberId].Rank := 3;
@@ -9395,6 +9449,8 @@ begin
   begin
     if (Packet.Content.ItemSlot[I] = $FF) then
       Continue;
+    if (Packet.Content.ItemSlot[I] > 63) then
+      Continue;
     if(ItemList[Player.Character.Base.Inventory[Packet.Content.ItemSlot[I]].Index].TypeTrade <> 0) then
       Continue;
     if not(TEntityMail.addMailItem(Player, Packet.Content.ItemSlot[I], I,
@@ -9699,6 +9755,9 @@ var
   Helper1: Integer;
 begin
   Result := False;
+  VaizanSlot := 255;
+  if (Packet.ItemID > 63) then
+    Exit;
   if (Packet.Null3 = 1) then
   begin // not make item, destroying item here
     case (TItemFunctions.GetItemEquipSlot(Player.Base.Character.Inventory
@@ -9911,6 +9970,8 @@ begin
           Exit;
         end;
     end;
+    if (VaizanSlot = 255) then
+      Exit;
     case Packet.Amount of
       0: // limpar todos
         begin
@@ -10190,6 +10251,9 @@ begin
       case Packet.ItensToRepareSlotType[i] of
         0:  //equip
           begin
+            if(Packet.ItensToRepareSlot[i] > 15) then
+                Continue;
+
             if(Player.Base.Character.Equip[
               Packet.ItensToRepareSlot[i]].Index = 0) then
                 Continue;
@@ -10258,6 +10322,9 @@ begin
 
         1: //inventário
           begin
+            if(Packet.ItensToRepareSlot[i] > 63) then
+                Continue;
+
             if(Player.Base.Character.Inventory[
               Packet.ItensToRepareSlot[i]].Index = 0) then
                 Continue;
@@ -10347,6 +10414,9 @@ begin
       case Packet.ItensToRepareSlotType[i] of
         0:  //equip
           begin
+            if(Packet.ItensToRepareSlot[i] > 15) then
+                Continue;
+
             Player.Base.Character.Equip[
               Packet.ItensToRepareSlot[i]].Min :=
                 Player.Base.Character.Equip[
@@ -10358,6 +10428,9 @@ begin
 
         1: //inventário
           begin
+            if(Packet.ItensToRepareSlot[i] > 63) then
+                Continue;
+
             Player.Base.Character.Inventory[
               Packet.ItensToRepareSlot[i]].Min :=
                 Player.Base.Character.Inventory[
@@ -11752,6 +11825,7 @@ var
 begin
   Result := False;
   Spawned:= False;
+  Helper := 0;
   if not(Player.CheckGameMasterLogged) then
     if not(Player.CheckAdminLogged) then
       if not(Player.CheckModeratorLogged) then

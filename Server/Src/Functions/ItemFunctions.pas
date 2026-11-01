@@ -1097,10 +1097,13 @@ begin
   //0 volta -2
   //1 volta -1
   //2 sucesso
-  if(Refine <= 0) then
-    Chance := ChancesOfRefinament[Refine]
+  Result := 1;
+  if (Refine = 0) then
+    Chance := ChancesOfRefinament[0]
+  else if (Refine - 1 <= High(ChancesOfRefinament)) then
+    Chance := ChancesOfRefinament[Refine-1]
   else
-    Chance := ChancesOfRefinament[Refine-1];
+    Chance := ChancesOfRefinament[High(ChancesOfRefinament)];
 
   Randomize;
   RamdomSlot := 100;
@@ -1200,27 +1203,26 @@ begin
 end;
 class function TItemFunctions.GetItemReinforceChance(const item: WORD;
   Refine: BYTE): WORD;
+var
+  Slot: Integer;
 begin
   Result := 0;
   if (ItemList[item].UseEffect <= 0) then
     Exit;
+  if (Refine > 15) then
+    Exit;
+  Slot := ItemList[item].UseEffect;
   case Self.GetItemEquipSlot(item) of
-    0 .. 5:
+    0 .. 5, 7:
       begin
-        Result := ReinforceA01[ItemList[item].UseEffect].Chance[Refine];
+        if (Slot <= High(ReinforceA01)) then
+          Result := ReinforceA01[Slot].Chance[Refine];
       end;
     6:
       begin
-        Result := ReinforceW01[ItemList[item].UseEffect].Chance[Refine];
+        if (Slot <= High(ReinforceW01)) then
+          Result := ReinforceW01[Slot].Chance[Refine];
       end;
-    7:
-      begin
-        Result := ReinforceA01[ItemList[item].UseEffect].Chance[Refine];
-      end;
-  else
-    begin
-      Result := 0;
-    end;
   end;
 end;
 class function TItemFunctions.ReinforceItem(var Player: TPlayer; item: DWORD;
@@ -1349,7 +1351,7 @@ var
   ItemType: WORD;
 begin
   Result := 0;
-  if not(ItemList[item].ItemType >= 2) and not(ItemList[item].ItemType <= 7)
+  if not((ItemList[item].ItemType >= 2) and (ItemList[item].ItemType <= 7))
   then
     Exit;
   ItemType := ItemList[item].ItemType;
@@ -1358,24 +1360,24 @@ begin
   Result := ((ItemType - 2) * 30) + ItemList[item].UseEffect;
 end;
 class function TItemFunctions.GetReinforceCust(const Index: WORD): Cardinal;
+var
+  Slot: Integer;
 begin
+  Result := 0;
+  if (ItemList[Index].UseEffect <= 0) then
+    Exit;
+  Slot := ItemList[Index].UseEffect - 1;
   case Self.GetItemEquipSlot(Index) of
-    2 .. 5:
+    2 .. 5, 7:
       begin
-        Result := ReinforceA01[ItemList[Index].UseEffect-1].ReinforceCust;
+        if (Slot <= High(ReinforceA01)) then
+          Result := ReinforceA01[Slot].ReinforceCust;
       end;
     6:
       begin
-        Result := ReinforceW01[ItemList[Index].UseEffect-1].ReinforceCust;
+        if (Slot <= High(ReinforceW01)) then
+          Result := ReinforceW01[Slot].ReinforceCust;
       end;
-    7:
-      begin
-        Result := ReinforceA01[ItemList[Index].UseEffect-1].ReinforceCust;
-      end;
-  else
-    begin
-      Result := 0;
-    end;
   end;
 end;
 class function TItemFunctions.GetItemReinforce2Index(ItemIndex: WORD): WORD;
