@@ -46,7 +46,7 @@ de evidências.
 | 4 | Leitura das tabelas `.bin` | `Load.pas` (2.719) | **pronto** (16 tabelas; CSV de drop/quest pendente) |
 | 5 | Acesso a MySQL | `SQL.pas` | **pronto** |
 | 6a | Núcleo de entidade: buffs, cooldown, visíveis, alvos | `BaseMob.pas` | **pronto** |
-| 6b | Combate: tipo de dano, amplificação, absorção, defesa, reflexo | `BaseMob.pas`, `Util.pas` | **parcial** (ramos de buff específicos a fazer) |
+| 6b | Combate: tipo de dano e pipeline completo no alvo | `BaseMob.pas`, `Util.pas` | **pronto** (`AttackParseForMobs`) |
 | 6c | Jogador, NPC, pet | `Player.pas` (12.859), `NPC.pas`, `PET.pas` | a fazer |
 | 7 | Handlers | `PacketHandlers.pas` (13.686), `NPCHandlers.pas`, `AuthHandlers.pas`, `CommandHandlers.pas` | a fazer |
 | 8 | Sistemas | itens/refino, dungeon, guild, party, mail, auction, nation, eventos, ranked | a fazer |
@@ -175,6 +175,14 @@ em `[1, total]`, embora a posição 0 seja pintada pela primeira chance.
 
 **A amplificação usa divisão inteira.** `(Dano div 100) * pct`, então 25% de
 1250 dá 120 e não 125.
+
+**A conversão de HP não custa mana.** O custo é
+`Help1 * (GetMobAbility(EF_MP_EFFICIENCY) div 100)`. O valor desse efeito é um
+número pequeno — o trecho comentado em `BaseMob.pas:9815` o usa como
+multiplicador de `Dano div 200` — então a divisão inteira por 100 dá zero.
+Quase certamente era `Help1 * eff div 100`, mas como a escala pretendida é
+ambígua o porte mantém a conta da origem: mudar custo de recurso alteraria o
+balanceamento sem ter como validar contra o cliente.
 
 ## Divergências do original
 

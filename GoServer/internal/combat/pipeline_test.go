@@ -303,3 +303,296 @@ func TestPipelineNeverPanics(t *testing.T) {
 		}()
 	}
 }
+
+// polyTarget implementa Polymorphed e ManaShield sobre o fakeTarget.
+type polyTarget struct {
+	*fakeTarget
+	poly      bool
+	player    bool
+	respawned bool
+	mp        uint32
+	mpLoaded  bool
+	mpRemoved []int
+}
+
+func newPoly() *polyTarget {
+	return &polyTarget{fakeTarget: newTarget(), player: true, mpLoaded: true}
+}
+
+func (p *polyTarget) IsPolymorphed() bool { return p.poly }
+func (p *polyTarget) ClearPolymorph()     { p.poly = false }
+func (p *polyTarget) IsPlayer() bool      { return p.player }
+func (p *polyTarget) Respawn()            { p.respawned = true }
+func (p *polyTarget) CurrentMP() (uint32, bool) {
+	return p.mp, p.mpLoaded
+}
+func (p *polyTarget) RemoveMP(v int) { p.mpRemoved = append(p.mpRemoved, v) }
+
+func TestConsumeOnHitBuffs(t *testing.T) {
+	tg := newTarget()
+	for _, b := range consumeOnHitBuffs {
+		tg.buffs[b] = true
+	}
+	tg.buffs[BuffAbsorb432] = true // nao e de gastar no golpe
+
+	ConsumeOnHitBuffs(tg)
+	for _, b := range consumeOnHitBuffs {
+		if tg.buffs[b] {
+			t.Errorf("buff %d deveria ter caido", b)
+		}
+	}
+	if !tg.buffs[BuffAbsorb432] {
+		t.Error("buff de absorcao nao deveria ser tocado aqui")
+	}
+}
+
+func TestPolymorph(t *testing.T) {
+	p := newPoly()
+	if got := Polymorph(Normal, p); got != Normal {
+		t.Errorf("sem transformacao = %v", got)
+	}
+
+	p.poly = true
+	if got := Polymorph(Normal, p); got != DoubleCritical {
+		t.Errorf("transformado = %v, queria DoubleCritical", got)
+	}
+	if p.poly {
+		t.Error("a transformacao deveria ter sido desfeita")
+	}
+	if !p.respawned || p.buffs[BuffPolymorph] {
+		t.Error("jogador deveria perder o buff 99 e renascer")
+	}
+}
+
+// Mob transformado nao renasce como jogador: na origem o teste
+// "ClientID <= MAX_CONNECTIONS" aceitava o id 0.
+func TestPolymorphOnMobDoesNotRespawn(t *testing.T) {
+	p := newPoly()
+	p.poly = true
+	p.player = false
+	p.buffs[BuffPolymorph] = true
+
+	if got := Polymorph(Normal, p); got != DoubleCritical {
+		t.Errorf("tipo = %v", got)
+	}
+	if p.respawned {
+		t.Error("mob nao deveria renascer por aqui")
+	}
+	if !p.buffs[BuffPolymorph] {
+		t.Error("mob nao deveria perder o buff 99 por aqui")
+	}
+}
+
+func TestHPConversionReducesDamage(t *testing.T) {
+	p := newPoly()
+	p.buffs[BuffHPConversion] = true
+	p.abilities[EFHPConversion] = 30
+	p.mp = 1000
+
+	// 30% de 1000 = 300 sai da mana; sobra 700 de dano.
+	if got := HPConversion(1000, p); got != 700 {
+		t.Errorf("dano = %d, queria 700", got)
+	}
+}
+
+// Peculiaridade da origem mantida: o custo de mana e Help1 * (eff div 100), e
+// com o efeito abaixo de 100 a divisao inteira da zero, entao nao custa mana.
+func TestHPConversionCostsNoManaWithSmallEfficiency(t *testing.T) {
+	p := newPoly()
+	p.buffs[BuffHPConversion] = true
+	p.abilities[EFHPConversion] = 30
+	p.abilities[EFMPEfficiency] = 50 // menor que 100
+	p.mp = 1000
+
+	HPConversion(1000, p)
+	if len(p.mpRemoved) != 1 || p.mpRemoved[0] != 0 {
+		t.Errorf("mana descontada = %v, a origem desconta 0", p.mpRemoved)
+	}
+}
+
+// Dano negativo nao pode virar um numero enorme na comparacao com a mana,
+// como acontecia no DWORD(Help1) da origem.
+func TestHPConversionNegativeDamage(t *testing.T) {
+	p := newPoly()
+	p.buffs[BuffHPConversion] = true
+	p.abilities[EFHPConversion] = 30
+	p.mp = 1000
+
+	got := HPConversion(-500, p)
+	if got < 0 {
+		t.Errorf("dano = %d: nao deveria ficar negativo", got)
+	}
+	if !p.buffs[BuffHPConversion] {
+		t.Error("dano negativo nao deveria derrubar o buff")
+	}
+}
+
+// Sem Character carregado a origem desreferenciava ponteiro nil.
+func TestHPConversionWithoutLoadedCharacter(t *testing.T) {
+	p := newPoly()
+	p.buffs[BuffHPConversion] = true
+	p.abilities[EFHPConversion] = 30
+	p.mpLoaded = false
+
+	if got := HPConversion(1000, p); got != 700 {
+		t.Errorf("dano = %d, queria 700", got)
+	}
+	if !p.buffs[BuffHPConversion] {
+		t.Error("sem mana carregada o buff nao deveria cair")
+	}
+}
+
+func TestHPConversionPassive(t *testing.T) {
+	tg := newTarget()
+	if got := HPConversionPassive(1000, tg); got != 1000 {
+		t.Errorf("sem efeito = %d", got)
+	}
+	tg.abilities[EFHPConversion] = 25
+	if got := HPConversionPassive(1000, tg); got != 750 {
+		t.Errorf("com 25%% = %d, queria 750", got)
+	}
+}
+
+func TestReflect2ZerosDamage(t *testing.T) {
+	alvo := newTarget()
+	atacante := newTarget()
+	alvo.buffs[BuffReflection] = true
+	alvo.abilities[EFReflection2] = 20
+
+	dano, refletido, dt := Reflect2(1000, alvo, atacante)
+	if dano != 0 {
+		t.Errorf("dano = %d, queria 0", dano)
+	}
+	if refletido != 200 {
+		t.Errorf("refletido = %d, queria 200", refletido)
+	}
+	if dt != None {
+		t.Errorf("tipo = %v, queria None", dt)
+	}
+	if atacante.hp != -200 {
+		t.Errorf("vida do atacante = %d", atacante.hp)
+	}
+	if alvo.buffs[BuffReflection] {
+		t.Error("o buff deveria ser consumido")
+	}
+}
+
+func TestReflect2WithoutBuff(t *testing.T) {
+	alvo := newTarget()
+	dano, refletido, _ := Reflect2(1000, alvo, newTarget())
+	if dano != 1000 || refletido != 0 {
+		t.Errorf("dano=%d refletido=%d: sem o buff nada muda", dano, refletido)
+	}
+}
+
+func TestReflect2WithoutAttacker(t *testing.T) {
+	alvo := newTarget()
+	alvo.buffs[BuffReflection] = true
+	alvo.abilities[EFReflection2] = 20
+	dano, refletido, _ := Reflect2(1000, alvo, nil)
+	if dano != 0 || refletido != 200 {
+		t.Errorf("dano=%d refletido=%d", dano, refletido)
+	}
+}
+
+// O pipeline completo na ordem da origem, com o caso simples.
+func TestApplyToTargetPlainHit(t *testing.T) {
+	alvo := newPoly()
+	atacante := newTarget()
+	pts := uint8(0)
+
+	got := ApplyToTarget(500, Normal, alvo, atacante, &pts)
+	if got.Damage != 500 {
+		t.Errorf("dano = %d, queria 500", got.Damage)
+	}
+	if got.Type != Normal {
+		t.Errorf("tipo = %v", got.Type)
+	}
+	if got.Reflected != 0 {
+		t.Errorf("refletido = %d", got.Reflected)
+	}
+}
+
+// Reflexo do buff 38 zera o golpe: os passos seguintes nao podem ressuscitar
+// o dano.
+func TestApplyToTargetReflection2ZerosDamage(t *testing.T) {
+	alvo := newPoly()
+	atacante := newTarget()
+	alvo.buffs[BuffReflection] = true
+	alvo.abilities[EFReflection2] = 10
+
+	got := ApplyToTarget(1000, Critical, alvo, atacante, nil)
+	if got.Damage != 0 {
+		t.Errorf("dano = %d, queria 0", got.Damage)
+	}
+	if got.Type != None {
+		t.Errorf("tipo = %v, queria None", got.Type)
+	}
+	if got.Reflected != 100 {
+		t.Errorf("refletido = %d, queria 100", got.Reflected)
+	}
+}
+
+// Absorcao que cobre o golpe tambem zera, e o tipo vira None.
+func TestApplyToTargetAbsorbCovers(t *testing.T) {
+	alvo := newPoly()
+	alvo.buffs[BuffAbsorb432] = true
+	alvo.abilities[EFSkillAbsorb1] = 10_000
+
+	got := ApplyToTarget(1000, Critical, alvo, newTarget(), nil)
+	if got.Damage != 0 || got.Type != None {
+		t.Errorf("dano=%d tipo=%v", got.Damage, got.Type)
+	}
+}
+
+// O pipeline inteiro, com tudo ligado ao mesmo tempo e valores absurdos.
+func TestApplyToTargetNeverPanics(t *testing.T) {
+	r := rand.New(rand.NewPCG(41, 43))
+	allBuffs := []uint16{
+		BuffAbsorb432, BuffAbsorb123, BuffAbsorb131, BuffAbsorb142,
+		BuffPointDefence, BuffReflection, BuffHPConversion,
+		BuffNevoaFC, BuffChoqueDual, BuffChoqueAtt, BuffPredador,
+	}
+	allEffects := []int{
+		EFAmpPhysical, EFType45, EFSkillAbsorb1, EFSkillAbsorb2,
+		EFPointDefence, EFReflection1, EFReflection2,
+		EFHPConversion, EFMPEfficiency,
+	}
+	for i := 0; i < 20000; i++ {
+		alvo := newPoly()
+		atacante := newTarget()
+		for _, b := range allBuffs {
+			if r.IntN(2) == 0 {
+				alvo.buffs[b] = true
+			}
+		}
+		for _, e := range allEffects {
+			alvo.abilities[e] = r.IntN(400) - 100
+		}
+		alvo.poly = r.IntN(2) == 0
+		alvo.player = r.IntN(2) == 0
+		alvo.mpLoaded = r.IntN(2) == 0
+		alvo.mp = uint32(r.UintN(100000))
+		pts := uint8(r.UintN(256))
+		dano := r.IntN(4_000_000) - 2_000_000
+
+		func() {
+			defer func() {
+				if p := recover(); p != nil {
+					t.Fatalf("iteracao %d: panico: %v", i, p)
+				}
+			}()
+			var att Target = atacante
+			if r.IntN(4) == 0 {
+				att = nil // atacante ausente tambem nao pode quebrar
+			}
+			got := ApplyToTarget(dano, Normal, alvo, att, &pts)
+			if got.Damage < 0 || got.Damage > MaxDamage {
+				t.Fatalf("iteracao %d: dano final %d fora da faixa", i, got.Damage)
+			}
+			if got.Type > None {
+				t.Fatalf("iteracao %d: tipo %d fora da faixa", i, got.Type)
+			}
+		}()
+	}
+}
