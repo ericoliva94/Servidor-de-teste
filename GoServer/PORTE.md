@@ -43,7 +43,7 @@ de evidências.
 | 1 | Módulo, tipos base (`Item`, `Position`, `ItemEffect`) | `MiscData.pas` | **pronto** |
 | 2 | Criptografia e enquadramento TCP | `EncDec.pas`, `PlayerThread.pas` | **pronto** |
 | 3 | Structs binárias: 319 records | `Packets.pas`, `PlayerData.pas`, `MiscData.pas`, `FilesData.pas`, `GuildData.pas`, `PartyData.pas`, `Entity*.pas` | **pronto** |
-| 4 | Leitura das tabelas `.bin` | `Load.pas` (2.719) | a fazer |
+| 4 | Leitura das tabelas `.bin` | `Load.pas` (2.719) | **pronto** (16 tabelas; CSV de drop/quest pendente) |
 | 5 | Acesso a MySQL | `SQL.pas`, `PlayerData.pas` | a fazer |
 | 6 | Entidades | `BaseMob.pas` (12.542), `Player.pas` (12.859), `MOB.pas`, `NPC.pas`, `PET.pas` | a fazer |
 | 7 | Handlers | `PacketHandlers.pas` (13.686), `NPCHandlers.pas`, `AuthHandlers.pas`, `CommandHandlers.pas` | a fazer |
@@ -86,6 +86,28 @@ Dois achados do gerador que valem registro, porque não são óbvios:
 - **`Boolean` do Delphi virou `uint8`, não `bool`.** `binary.Read` aceita
   qualquer byte num `bool` do Go, mas `binary.Write` devolve `0x01`: um pacote
   que o servidor ecoa de volta sairia alterado. `uint8` preserva o byte.
+
+## O que os dados reais revelaram
+
+A fase 4 lê os `.bin` de `Server/Bin/Data`, e os testes rodam contra esses
+arquivos de verdade. Três coisas apareceram, todas **pré-existentes** no
+servidor Delphi — o porte as reproduz, mas agora elas saem no log de carga em
+vez de passar caladas:
+
+| Arquivo | O que acontece |
+|---|---|
+| `ItemList.bin` | tem 26.000 itens, mas `TItemList` é `ARRAY [0..20477]`: **5.522 itens do arquivo nunca são lidos** |
+| `SkillData.bin` | tem 12.000 skills, `TSkillData` é `ARRAY [0..11998]`: 1 skill fora |
+| `Map.bin` | tem 69.184 bytes (4.324 limites), `TFileMapsData` guarda 64: **só 1.024 bytes são lidos** |
+
+Nos três casos o Delphi lê com `Read(f, Tabela)` de arquivo tipado, que
+consome exatamente `sizeof(Tabela)` e ignora o resto — o porte faz igual e
+reporta a sobra em `Table.Truncated`.
+
+Também confirmado contra dado real: `ItemList.bin` **não tem cabeçalho**. Os
+4 bytes de sobra estão no fim do arquivo, não no início — os nomes dos itens
+caem exatamente nos offsets 0 e 64 de cada registro de 464 bytes, e o item 10
+é `WarriorFace1` no byte 4640 = 10 × 464. Isso está travado por teste.
 
 ## Divergências do original
 
