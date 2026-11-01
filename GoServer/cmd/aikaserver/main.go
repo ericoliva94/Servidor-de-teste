@@ -75,12 +75,14 @@ func run() error {
 	var (
 		accounts auth.Accounts
 		chars    game.Characters
+		numerics game.NumericStore
 		tokens   tokensrv.Store
 	)
 	if *skipDB {
 		log.Warn("subindo sem banco: nenhum login sera aceito")
 		accounts = noAccounts{}
 		chars = noChars{}
+		numerics = noChars{}
 	} else {
 		db, err := store.Open(ctx, store.Config{
 			Server:   cfg.MySQLServer,
@@ -99,7 +101,9 @@ func run() error {
 		accs := store.Accounts{DB: db}
 		accounts = accs
 		tokens = accs
-		chars = store.Characters{DB: db}
+		cs := store.Characters{DB: db}
+		chars = cs
+		numerics = cs
 	}
 
 	loginSrv := netsrv.New(netsrv.Config{
@@ -118,6 +122,7 @@ func run() error {
 		Channel:       0,
 		Accounts:      accounts,
 		Chars:         chars,
+		Numerics:      numerics,
 		Log:           log,
 		ServerVersion: uint16(cfg.Version),
 	})
@@ -197,6 +202,10 @@ func (noChars) ByAccount(context.Context, uint32) ([store.MaxCharacterSlots]stor
 	var zero [store.MaxCharacterSlots]store.Character
 	return zero, nil, nil
 }
+
+func (noChars) SaveNumeric(context.Context, uint32, string) error { return nil }
+
+func (noChars) SaveNumericErrors(context.Context, uint32, int) error { return nil }
 
 // noAccounts recusa todo login. Usado com -no-db.
 type noAccounts struct{}

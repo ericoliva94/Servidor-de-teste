@@ -44,6 +44,7 @@ type Handler struct {
 	Channel  uint8
 	Accounts auth.Accounts
 	Chars    Characters
+	Numerics NumericStore
 	Now      func() time.Time
 	Log      *slog.Logger
 	// ServerVersion e o SERVER_VERSION do .ini, so para registro: o original
@@ -70,6 +71,8 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 	switch p.Code {
 	case CodeCheckLogin:
 		return h.checkLogin(ctx, c, s, p)
+	case CodeNumericToken:
+		return h.numericToken(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta

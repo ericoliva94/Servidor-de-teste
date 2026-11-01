@@ -1,0 +1,236 @@
+package game
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"aika/internal/model"
+	"aika/internal/netsrv"
+	"aika/internal/packets"
+	"aika/internal/protocol"
+	"aika/internal/store"
+)
+
+// Codigos do caminho de entrada no mundo.
+const (
+	CodeNumericToken = 0xF02 // cliente -> servidor
+	CodeSendToWorld  = 0x925 // servidor -> cliente
+	CodeP131         = 0x131 // servidor -> cliente (precede a entrada)
+)
+
+// WorldIndex e o Header.Index que SendToWorld usa, fixo na origem.
+const WorldIndex = 0x7535
+
+// MaxNumericErrors e o limite de erros da numerica por slot. Na origem o
+// teste era "NumError[Slot] >= 5".
+const MaxNumericErrors = 5
+
+// Modos de RequestChange do pacote $F02.
+const (
+	NumericRegister = 0 // cadastrar quando ainda nao ha numerica
+	NumericVerify   = 1 // conferir a numerica
+	NumericChange   = 2 // trocar a numerica
+)
+
+// Erros do caminho de entrada.
+var (
+	ErrSlotOutOfRange   = errors.New("game: slot de personagem fora da faixa")
+	ErrEmptySlot        = errors.New("game: slot de personagem vazio")
+	ErrNumericLocked    = errors.New("game: numerica bloqueada por erros")
+	ErrNumericWrong     = errors.New("game: numerica incorreta")
+	ErrNumericExists    = errors.New("game: numerica ja cadastrada")
+	ErrNotAuthenticated = errors.New("game: sessao nao autenticada")
+)
+
+// NumericStore grava a numerica e o contador de erros.
+type NumericStore interface {
+	// SaveNumeric grava a numerica do personagem.
+	SaveNumeric(ctx context.Context, charID uint32, numeric string) error
+	// SaveNumericErrors grava o contador de erros.
+	SaveNumericErrors(ctx context.Context, charID uint32, errorsCount int) error
+}
+
+// numericToken e o porte de TPacketHandlers.NumericToken ($F02).
+//
+// A diferenca central em relacao a origem e a validacao do slot. Ali o
+// primeiro acesso era "if (Player.Account.Header.NumError[Packet.Slot] >= 5)",
+// com Packet.Slot vindo do cliente como DWORD e NumError sendo
+// Array [0..2] of byte: um slot fora de 0..2 lia e depois ESCREVIA fora do
+// vetor, no meio do registro da conta, antes de qualquer checagem.
+func (h *Handler) numericToken(ctx context.Context, c *netsrv.Conn, s *Session, p protocol.Packet) error {
+	if !s.Authenticated {
+		c.Close()
+		return ErrNotAuthenticated
+	}
+
+	var pkt packets.NumericTokenPacket
+	if err := netsrv.Unmarshal(p, &pkt); err != nil {
+		c.Close()
+		return err
+	}
+
+	slot := int(pkt.Slot)
+	if slot < 0 || slot >= store.MaxCharacterSlots {
+		c.Close()
+		return ErrSlotOutOfRange
+	}
+	ch := s.Characters[slot]
+	if ch.ID == 0 {
+		c.Close()
+		return ErrEmptySlot
+	}
+	if int(ch.NumericErrors) >= MaxNumericErrors {
+		c.Close()
+		return ErrNumericLocked
+	}
+
+	atual := strings.TrimSpace(ch.NumericToken)
+	n1 := numericField(pkt.Numeric_1[:])
+	n2 := numericField(pkt.Numeric_2[:])
+
+	switch pkt.RequestChange {
+	case NumericRegister:
+		// Na origem o cadastro so acontecia com a numerica vazia, e quando
+		// havia uma o pacote era ignorado em silencio: o cliente ficava
+		// esperando. Aqui a recusa e explicita.
+		if atual != "" {
+			return h.rejectNumeric(ctx, c, s, slot, ErrNumericExists)
+		}
+		if n1 == "" {
+			return h.rejectNumeric(ctx, c, s, slot, ErrNumericWrong)
+		}
+		if err := h.Numerics.SaveNumeric(ctx, ch.ID, n1); err != nil {
+			c.Close()
+			return err
+		}
+		s.Characters[slot].NumericToken = n1
+
+	case NumericVerify:
+		if atual == "" || !strings.EqualFold(n1, atual) {
+			return h.rejectNumeric(ctx, c, s, slot, ErrNumericWrong)
+		}
+		// Acerto zera o contador de erros.
+		if ch.NumericErrors != 0 {
+			if err := h.Numerics.SaveNumericErrors(ctx, ch.ID, 0); err != nil {
+				c.Close()
+				return err
+			}
+			s.Characters[slot].NumericErrors = 0
+		}
+
+	case NumericChange:
+		// Numeric_2 traz a numerica atual e Numeric_1 a nova.
+		if atual == "" || !strings.EqualFold(n2, atual) {
+			return h.rejectNumeric(ctx, c, s, slot, ErrNumericWrong)
+		}
+		if n1 == "" {
+			return h.rejectNumeric(ctx, c, s, slot, ErrNumericWrong)
+		}
+		if err := h.Numerics.SaveNumeric(ctx, ch.ID, n1); err != nil {
+			c.Close()
+			return err
+		}
+		s.Characters[slot].NumericToken = n1
+
+	default:
+		// Modo desconhecido nao pode cair no caminho de entrada: na origem o
+		// case sem ramo deixava o cliente sem resposta.
+		h.log().Warn("modo de numerica desconhecido",
+			"modo", pkt.RequestChange, "ip", c.IP(), "usuario", s.Username)
+		return nil
+	}
+
+	return h.sendToWorld(ctx, c, s, slot)
+}
+
+// rejectNumeric conta o erro, devolve o pacote ao cliente e reenvia a lista,
+// como o ramo de falha da origem.
+func (h *Handler) rejectNumeric(ctx context.Context, c *netsrv.Conn, s *Session, slot int, cause error) error {
+	ch := &s.Characters[slot]
+	if ch.NumericErrors < 255 {
+		ch.NumericErrors++
+	}
+	if err := h.Numerics.SaveNumericErrors(ctx, ch.ID, int(ch.NumericErrors)); err != nil {
+		h.log().Error("numerica: gravar contador de erros",
+			"personagem", ch.ID, "erro", err)
+	}
+	s.SubStatus = Waiting
+	h.log().Info("numerica recusada",
+		"usuario", s.Username, "slot", slot,
+		"erros", ch.NumericErrors, "motivo", cause)
+
+	// Reenvia a lista para o cliente voltar a tela de selecao.
+	if err := h.sendCharList(c, s); err != nil {
+		return err
+	}
+	return nil
+}
+
+// sendToWorld monta e envia o $925. Porte de TPlayer.SendToWorld.
+//
+// Nesta fase o pacote leva o que a tabela characters fornece: identidade,
+// nivel, atributos, ouro e posicao. Inventario, equipamento, skills, buffs,
+// quests e titulos ficam zerados porque vivem em tabelas proprias e entram
+// nos incrementos seguintes; ver GoServer/PORTE.md.
+func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, slot int) error {
+	if slot < 0 || slot >= store.MaxCharacterSlots {
+		return ErrSlotOutOfRange
+	}
+	src := s.Characters[slot]
+	if src.ID == 0 {
+		return ErrEmptySlot
+	}
+
+	// O cliente espera o $131 antes da entrada.
+	var p131 packets.Tp131
+	p131.Unk_1 = 0xFFFFFFFF
+	if err := c.SendStruct(CodeP131, p131); err != nil {
+		return err
+	}
+
+	var pkt packets.SendToWorldPacket
+	pkt.Header.Index = WorldIndex
+	pkt.AcountSerial = s.Account.ID
+
+	ch := &pkt.Character
+	ch.ClientId = uint32(s.ClientID)
+	ch.CharIndex = src.ID
+	netsrv.PutCString(ch.Name[:], src.Name)
+	ch.Nation = s.Account.Nation
+	ch.ClassInfo = uint8(src.ClassInfo)
+	ch.Level = src.Level
+	ch.Exp = src.Exp
+	ch.Gold = src.Gold
+	ch.GuildIndex = src.GuildIndex
+	ch.CurrentScore = model.Status{
+		Str:     src.Strength,
+		Agility: src.Agility,
+		Int:     src.Intelligence,
+		Cons:    src.Constitution,
+		Luck:    src.Luck,
+		Sizes: model.Sizes{
+			Altura: src.Altura, Tronco: src.Tronco,
+			Perna: src.Perna, Corpo: src.Corpo,
+		},
+		CurHP: src.CurHP,
+		CurMp: src.CurMP,
+		Honor: src.Honor,
+	}
+	netsrv.PutCString(ch.Numeric[:], src.NumericToken)
+
+	s.SelectedSlot = slot
+	s.Status = Playing
+	s.SubStatus = Playing
+
+	h.log().Info("personagem entrou no mundo",
+		"usuario", s.Username, "personagem", src.Name,
+		"slot", slot, "nivel", src.Level, "canal", h.Channel)
+
+	return c.SendStruct(CodeSendToWorld, pkt)
+}
+
+// numericField le a numerica de um campo de tamanho fixo.
+func numericField(b []byte) string {
+	return strings.TrimSpace(netsrv.CString(b))
+}

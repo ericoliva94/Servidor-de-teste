@@ -33,6 +33,10 @@ type Character struct {
 	Perna  uint8
 	Corpo  uint8
 
+	CurHP uint32
+	CurMP uint32
+	Honor uint32
+
 	NumericToken  string
 	NumericErrors uint8
 	Deleted       bool
@@ -59,6 +63,7 @@ func (c Characters) ByAccount(ctx context.Context, accountID uint32) ([MaxCharac
 		SELECT id, slot, name, classinfo, level, experience, gold, guildindex,
 		       strength, agility, intelligence, constitution, luck,
 		       altura, tronco, perna, corpo,
+		       curhp, curmp, honor,
 		       numeric_token, numeric_errors, deleted, delete_time
 		  FROM characters
 		 WHERE owner_accid = :acc
@@ -83,6 +88,9 @@ func (c Characters) ByAccount(ctx context.Context, accountID uint32) ([MaxCharac
 			luck       int64
 			alt, tro   int64
 			per, cor   int64
+			curhp      int64
+			curmp      int64
+			honor      int64
 			name       sql.NullString
 			numTok     sql.NullString
 			numErr     int64
@@ -91,7 +99,8 @@ func (c Characters) ByAccount(ctx context.Context, accountID uint32) ([MaxCharac
 		)
 		if err := rows.Scan(&ch.ID, &slot, &name, &classInfo, &level, &ch.Exp,
 			&ch.Gold, &guild, &str, &agi, &intel, &con, &luck,
-			&alt, &tro, &per, &cor, &numTok, &numErr, &deleted, &deleteTime); err != nil {
+			&alt, &tro, &per, &cor, &curhp, &curmp, &honor,
+			&numTok, &numErr, &deleted, &deleteTime); err != nil {
 			return out, avisos, fmt.Errorf("store: ler personagem: %w", err)
 		}
 
@@ -116,6 +125,9 @@ func (c Characters) ByAccount(ctx context.Context, accountID uint32) ([MaxCharac
 		ch.Tronco = clampToByte(tro)
 		ch.Perna = clampToByte(per)
 		ch.Corpo = clampToByte(cor)
+		ch.CurHP = clampToDword(curhp)
+		ch.CurMP = clampToDword(curmp)
+		ch.Honor = clampToDword(honor)
 		ch.NumericToken = numTok.String
 		ch.NumericErrors = clampToByte(numErr)
 		ch.Deleted = deleted != 0
@@ -137,6 +149,17 @@ func (c Characters) ByAccount(ctx context.Context, accountID uint32) ([MaxCharac
 		return out, avisos, fmt.Errorf("store: ler personagens: %w", err)
 	}
 	return out, avisos, nil
+}
+
+// clampToDword converte coluna INT para o DWORD do protocolo sem estourar.
+func clampToDword(v int64) uint32 {
+	if v < 0 {
+		return 0
+	}
+	if v > 0xFFFFFFFF {
+		return 0xFFFFFFFF
+	}
+	return uint32(v)
 }
 
 // clampToWord converte coluna INT para o WORD do protocolo sem estourar.
@@ -167,4 +190,32 @@ func parseDelphiDateTime(s string) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("store: data %q em formato desconhecido", s)
+}
+
+// SaveNumeric grava a numerica do personagem.
+//
+// Porte da parte de SaveCharOnCharRoom que persiste a numerica. Na origem a
+// numerica vivia em Account.Header.NumericToken[Slot], um vetor de 3
+// posicoes indexado pelo slot vindo do cliente; aqui a chave e o id do
+// personagem, que nao depende de o slot estar na faixa.
+func (c Characters) SaveNumeric(ctx context.Context, charID uint32, numeric string) error {
+	const q = `UPDATE characters SET numeric_token = :num WHERE id = :id`
+	if _, err := c.DB.Exec(ctx, q,
+		sql.Named("num", numeric), sql.Named("id", charID)); err != nil {
+		return fmt.Errorf("store: gravar numerica: %w", err)
+	}
+	return nil
+}
+
+// SaveNumericErrors grava o contador de erros da numerica.
+func (c Characters) SaveNumericErrors(ctx context.Context, charID uint32, errorsCount int) error {
+	if errorsCount < 0 {
+		errorsCount = 0
+	}
+	const q = `UPDATE characters SET numeric_errors = :n WHERE id = :id`
+	if _, err := c.DB.Exec(ctx, q,
+		sql.Named("n", errorsCount), sql.Named("id", charID)); err != nil {
+		return fmt.Errorf("store: gravar erros da numerica: %w", err)
+	}
+	return nil
 }
