@@ -46,7 +46,7 @@ de evidências.
 | 4 | Leitura das tabelas `.bin` | `Load.pas` (2.719) | **pronto** (16 tabelas; CSV de drop/quest pendente) |
 | 5 | Acesso a MySQL | `SQL.pas` | **pronto** |
 | 6a | Núcleo de entidade: buffs, cooldown, visíveis, alvos | `BaseMob.pas` | **pronto** |
-| 6b | Combate: sorteio de tipo de dano, aritmética com limite | `BaseMob.pas`, `Util.pas` | **parcial** (tipo de dano pronto; pipeline de dano a fazer) |
+| 6b | Combate: tipo de dano, amplificação, absorção, defesa, reflexo | `BaseMob.pas`, `Util.pas` | **parcial** (ramos de buff específicos a fazer) |
 | 6c | Jogador, NPC, pet | `Player.pas` (12.859), `NPC.pas`, `PET.pas` | a fazer |
 | 7 | Handlers | `PacketHandlers.pas` (13.686), `NPCHandlers.pas`, `AuthHandlers.pas`, `CommandHandlers.pas` | a fazer |
 | 8 | Sistemas | itens/refino, dungeon, guild, party, mail, auction, nation, eventos, ranked | a fazer |
@@ -155,6 +155,26 @@ nome dizendo qual é qual — inclusive as duas que a origem chama igual:
 | `Dec(var x: Word)`, `DecWORD` | `num.DecWord` | limita em `[0, 65535]` |
 | `Dec(var x: Byte)` | `num.DecByte` | limita em `[0, 255]` |
 | `Dec(X, N)` com `Cardinal` | `num.DecCardinal` | limita em zero (a origem estoura) |
+
+## Peculiaridades mantidas de propósito
+
+Comportamento estranho da origem que o cliente ou o balanceamento já dependem.
+Cada um tem teste nomeado, para que uma "correção" futura falhe o teste em vez
+de mudar o jogo em silêncio.
+
+**Dano acima de 999999 vira 1, não o teto.** É a guarda de `AttackParse`
+contra valor absurdo (`if(Dano > 999999) then Dano := 1`).
+
+**Absorção que não cobre o golpe não consome o escudo.** No ramo em que o
+escudo é menor que o dano, o Delphi desconta o escudo do dano mas não chama
+`DecreasseMobAbility`. Com três buffs de absorção ativos, o mesmo valor é
+descontado três vezes do golpe (300 − 30 − 30 − 30 = 210).
+
+**A posição 0 da roleta de dano nunca sai.** `RandomRange(1, total+1)` sorteia
+em `[1, total]`, embora a posição 0 seja pintada pela primeira chance.
+
+**A amplificação usa divisão inteira.** `(Dano div 100) * pct`, então 25% de
+1250 dá 120 e não 125.
 
 ## Divergências do original
 
