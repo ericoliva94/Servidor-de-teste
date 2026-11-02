@@ -43,6 +43,14 @@ type Avatar struct {
 	MaxHP uint32
 	MaxMP uint32
 
+	Exp          int64
+	Gold         int64
+	Honor        uint32
+	KillPoint    uint32
+	Infamia      uint32
+	SkillPoint   uint16
+	StatusPoints uint16
+
 	Rotation  uint32
 	SpeedMove uint16
 
@@ -75,26 +83,33 @@ type Avatar struct {
 // recalculados por RecalcMax quando algo que entra na conta mudar.
 func AvatarFromCharacter(src store.Character, nation uint16) Avatar {
 	a := Avatar{
-		Name:       src.Name,
-		ClassInfo:  src.ClassInfo,
-		Level:      src.Level,
-		Nation:     nation,
-		GuildIndex: src.GuildIndex,
-		Str:        src.Strength,
-		Agility:    src.Agility,
-		Int:        src.Intelligence,
-		Cons:       src.Constitution,
-		Luck:       src.Luck,
-		Altura:     src.Altura,
-		Tronco:     src.Tronco,
-		Perna:      src.Perna,
-		Corpo:      src.Corpo,
-		CurHP:      src.CurHP,
-		CurMP:      src.CurMP,
-		Rotation:   src.Rotation,
-		SpeedMove:  src.SpeedMove,
-		PlayerKill: src.PlayerKill,
-		TitleID:    uint8(min(src.ActiveTitle, 255)),
+		Name:         src.Name,
+		ClassInfo:    src.ClassInfo,
+		Level:        src.Level,
+		Nation:       nation,
+		GuildIndex:   src.GuildIndex,
+		Str:          src.Strength,
+		Agility:      src.Agility,
+		Int:          src.Intelligence,
+		Cons:         src.Constitution,
+		Luck:         src.Luck,
+		Altura:       src.Altura,
+		Tronco:       src.Tronco,
+		Perna:        src.Perna,
+		Corpo:        src.Corpo,
+		CurHP:        src.CurHP,
+		CurMP:        src.CurMP,
+		Exp:          src.Exp,
+		Gold:         src.Gold,
+		Honor:        src.Honor,
+		KillPoint:    src.KillPoint,
+		Infamia:      src.Infamia,
+		SkillPoint:   src.SkillPoint,
+		StatusPoints: src.Status,
+		Rotation:     src.Rotation,
+		SpeedMove:    src.SpeedMove,
+		PlayerKill:   src.PlayerKill,
+		TitleID:      uint8(min(src.ActiveTitle, 255)),
 	}
 	if a.SpeedMove == 0 {
 		// Personagem gravado com velocidade zero nao andaria. O original

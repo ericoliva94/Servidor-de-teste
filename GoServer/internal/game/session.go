@@ -67,6 +67,10 @@ type Session struct {
 	// LastMoved e o instante do ultimo passo aceito. Era
 	// TBaseMob.LastMovedTime no original.
 	LastMoved time.Time
+	// LastShout e o instante do ultimo grito (ShoutTime no original).
+	LastShout time.Time
+	// LastPing e o instante do ultimo `ping (PingCommandUsed no original).
+	LastPing time.Time
 
 	Dead bool
 

@@ -97,6 +97,14 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.numericToken(ctx, c, s, p)
 	case CodeMovement:
 		return h.movement(ctx, c, s, p)
+	case CodeClientSay:
+		return h.clientSay(ctx, c, s, p)
+	case CodeUpdateRotation:
+		return h.updateRotation(ctx, c, s, p)
+	case CodeRequestCharInfo:
+		return h.requestCharInfo(ctx, c, s, p)
+	case CodeRequestTime:
+		return h.requestServerTime(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta

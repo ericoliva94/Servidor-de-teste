@@ -268,6 +268,10 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 		"slot", slot, "nivel", src.Level, "hp", s.Avatar.MaxHP,
 		"mp", s.Avatar.MaxMP, "canal", h.Channel)
 
+	if h.Chan != nil {
+		h.Chan.RegisterCharacter(s.ClientID, src.Name)
+	}
+
 	if err := c.SendStruct(CodeSendToWorld, pkt); err != nil {
 		return err
 	}

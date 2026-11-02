@@ -29,6 +29,7 @@ type Channel struct {
 	mu       sync.RWMutex
 	sessions map[uint16]*member
 	byUser   map[string]uint16
+	byChar   map[string]uint16
 	nextHint uint16
 }
 
@@ -47,12 +48,16 @@ func NewChannel(id uint8, maxConns uint16) *Channel {
 		maxConns: maxConns,
 		sessions: make(map[uint16]*member, 64),
 		byUser:   make(map[string]uint16, 64),
+		byChar:   make(map[string]uint16, 64),
 		nextHint: entity.MinPlayerID,
 	}
 }
 
 // ID devolve o numero do canal.
 func (ch *Channel) ID() uint8 { return ch.id }
+
+// MaxConns devolve o maior ClientID que o canal aloca.
+func (ch *Channel) MaxConns() uint16 { return ch.maxConns }
 
 // Count conta as sessoes registradas.
 func (ch *Channel) Count() int {
@@ -123,6 +128,11 @@ func (ch *Channel) Leave(clientID uint16) {
 		return
 	}
 	delete(ch.sessions, clientID)
+	if n := normalizeUser(m.session.Avatar.Name); n != "" {
+		if cur, ok := ch.byChar[n]; ok && cur == clientID {
+			delete(ch.byChar, n)
+		}
+	}
 	if u := normalizeUser(m.session.Username); u != "" {
 		// So apaga se ainda aponta para este id: um login novo do mesmo
 		// usuario pode ter assumido a entrada.
@@ -141,6 +151,35 @@ func (ch *Channel) Lookup(clientID uint16) (*Session, *netsrv.Conn, bool) {
 		return nil, nil, false
 	}
 	return m.session, m.conn, true
+}
+
+// RegisterCharacter indexa o nome do personagem em jogo.
+//
+// Porte de Servers[].GetPlayer / GetPlayerByName, que varriam as 1000
+// posicoes do vetor a cada chamada — e eram chamados de dentro de lacos.
+func (ch *Channel) RegisterCharacter(clientID uint16, nome string) {
+	n := normalizeUser(nome)
+	if n == "" {
+		return
+	}
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	if _, ok := ch.sessions[clientID]; !ok {
+		return
+	}
+	ch.byChar[n] = clientID
+}
+
+// FindByCharacter acha o ClientID pelo nome do personagem.
+func (ch *Channel) FindByCharacter(nome string) (uint16, bool) {
+	n := normalizeUser(nome)
+	if n == "" {
+		return 0, false
+	}
+	ch.mu.RLock()
+	defer ch.mu.RUnlock()
+	id, ok := ch.byChar[n]
+	return id, ok
 }
 
 // FindByUsername acha o ClientID de um usuario conectado.

@@ -69,7 +69,8 @@ de evidências.
 | 10d | Entrada no mundo: numérica (`$F02`) e `SendToWorld` (`$925`) | `PacketHandlers.pas`, `Player.pas` | **pronto** |
 | 10e | Registro do canal, movimento (`$301`), spawn (`$349`) e remoção (`$101`) | `ServerSocket.pas`, `BaseMob.pas`, `PacketHandlers.pas` | **pronto** |
 | 10f | Inventário e equipamento do banco, bônus de refino no HP/MP | `Player.pas`, `ItemFunctions.pas` | **pronto** |
-| 10g | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10g | Conversa (`$F86`), rotação (`$305`), info de personagem (`$22C`/`$19E`), hora (`$202`) | `PacketHandlers.pas`, `Player.pas` | **pronto** |
+| 10h | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -352,6 +353,33 @@ sem checagem. Agora não há índice para esse caso e o bônus é zero.
 `Refi` 8 o refino é 0 e com 24 é 2. `Packet.ItemEff[7]`, no mesmo arquivo, usa
 `div 16`. Os dois valores diferem para metade dos refinos e os dois foram
 portados como estão, cada um no seu lugar.
+
+**`game.clientSay`, autor da fala** — `SendClientSay` repassava o pacote do
+jeito que chegou, e tanto `Header.Index` quanto `Nick` são escritos pelo
+cliente: dava para falar no nome de outra pessoa. Agora os dois vão com os
+dados do autor. O campo `Fala` é `ARRAY [0..127] OF AnsiChar` e era copiado sem
+limite: texto sem terminador fazia a leitura seguir pelos campos vizinhos do
+pacote; agora é lido com limite e reescrito com terminador.
+
+**`game.shout`, momento de marcar o relógio** — `ShoutTime` só era gravado
+**depois** do laço que envia o grito a todos. Uma exceção no meio do laço
+deixava o jogador sem limite nenhum. Agora o instante é marcado antes do envio.
+
+**`game.requestCharInfo`** — a guarda era
+`if (Packet.Index >= 0) or (Packet.Index <= MAX_CONNECTIONS)`. Com `Index`
+sendo `DWORD`, o primeiro teste é sempre verdadeiro e o `or` deixa a condição
+sempre verdadeira; o ramo seguinte fazia
+`@Servers[ChannelIndex].Players[Packet.Index]` com um valor de até 4 bilhões
+num vetor de 1000 posições. Agora o índice é validado contra o limite real do
+canal.
+
+**`game.Channel.FindByCharacter`** — `GetPlayer` e `GetPlayerByName` varriam as
+1000 posições do vetor a cada chamada, e eram chamados de dentro de laços.
+Agora é um índice por nome, mantido na entrada e na saída do jogador.
+
+**Canais de conversa ainda não portados** — grupo, guilda, aliança, nação e
+megafone respondem uma mensagem dizendo que não estão disponíveis. Na origem o
+jogador digitava e nada acontecia, sem nenhum retorno.
 
 **`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da
