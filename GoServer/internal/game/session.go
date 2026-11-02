@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"aika/internal/auth"
+	"aika/internal/combat"
 	"aika/internal/entity"
 	"aika/internal/model"
 	"aika/internal/store"
@@ -71,6 +72,14 @@ type Session struct {
 	LastShout time.Time
 	// LastPing e o instante do ultimo `ping (PingCommandUsed no original).
 	LastPing time.Time
+	// LastAttack e o instante do ultimo golpe aceito (LastBasicAttack).
+	LastAttack time.Time
+	// AttacksAccumulated conta os golpes para o desgaste da arma.
+	AttacksAccumulated int
+
+	// Roller e a roleta de tipo de dano desta sessao. Fica aqui, e nao numa
+	// global, porque o vetor de 1000 posicoes e reusado a cada golpe.
+	Roller combat.Roller
 
 	Dead bool
 

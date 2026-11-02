@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"aika/internal/auth"
+	"aika/internal/combat"
 	"aika/internal/entity"
 	"aika/internal/itemfn"
 	"aika/internal/model"
@@ -69,6 +70,8 @@ type Handler struct {
 	// Data sao as tabelas .bin que as contas de item precisam; nil zera os
 	// bonus em vez de quebrar.
 	Data itemfn.Tabelas
+	// Rand e a fonte de sorteio do combate; nil usa a global.
+	Rand combat.Rand
 	Now  func() time.Time
 	Log  *slog.Logger
 	// ServerVersion e o SERVER_VERSION do .ini, so para registro: o original
@@ -111,6 +114,10 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.moveItem(ctx, c, s, p)
 	case CodeDeleteItem:
 		return h.deleteItem(ctx, c, s, p)
+	case CodeAttack:
+		return h.attack(ctx, c, s, p)
+	case CodeRevive:
+		return h.revive(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta

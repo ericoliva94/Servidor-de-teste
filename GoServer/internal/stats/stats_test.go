@@ -87,3 +87,92 @@ func TestTodasAsClassesTemTabela(t *testing.T) {
 		}
 	}
 }
+
+// ---- Derived
+
+// O Round do Delphi arredonda para o par no empate; Trunc corta para zero.
+func TestRoundEhBancario(t *testing.T) {
+	casos := []struct {
+		in   float64
+		quer int
+	}{
+		{0.5, 0}, {1.5, 2}, {2.5, 2}, {3.5, 4},
+		{1.4, 1}, {1.6, 2},
+		{-0.5, 0}, {-1.5, -2}, {-2.5, -2},
+	}
+	for _, c := range casos {
+		if got := round(c.in); got != c.quer {
+			t.Errorf("round(%v) = %d, queria %d", c.in, got, c.quer)
+		}
+	}
+}
+
+func TestTruncCortaParaZero(t *testing.T) {
+	if got := trunc(1.9); got != 1 {
+		t.Errorf("trunc(1.9) = %d", got)
+	}
+	if got := trunc(-1.9); got != -1 {
+		t.Errorf("trunc(-1.9) = %d", got)
+	}
+}
+
+// Personagem sem pontos nao tem ataque, mas tem velocidade base.
+func TestComputeSemPontos(t *testing.T) {
+	d := Compute(Score{}, Bonus{})
+	if d.AtkFis != 0 || d.AtkMag != 0 {
+		t.Errorf("ataque = %d/%d, queria 0/0", d.AtkFis, d.AtkMag)
+	}
+	if d.SpeedMove != baseSpeedMove {
+		t.Errorf("velocidade = %d, queria %d", d.SpeedMove, baseSpeedMove)
+	}
+}
+
+// Os pontos efetivos somam o bonus, saturando como IncCritical.
+func TestBonusDeAtributoSoma(t *testing.T) {
+	semBonus := Compute(Score{Str: 50}, Bonus{})
+	comBonus := Compute(Score{Str: 50}, Bonus{Str: 50})
+	if comBonus.AtkFis <= semBonus.AtkFis {
+		t.Errorf("bonus de forca nao somou: %d vs %d",
+			comBonus.AtkFis, semBonus.AtkFis)
+	}
+}
+
+// O percentual de dano incide sobre o total ja somado, como na origem.
+func TestPercentualDeDanoIncideSobreOTotal(t *testing.T) {
+	base := Compute(Score{Str: 100, Agility: 100}, Bonus{})
+	com := Compute(Score{Str: 100, Agility: 100}, Bonus{AtkFisPercent: 50})
+	quer := base.AtkFis + uint16(50*(int(base.AtkFis)/100))
+	if com.AtkFis != quer {
+		t.Errorf("AtkFis = %d, queria %d", com.AtkFis, quer)
+	}
+}
+
+// A arma entra antes dos pontos: o percentual pega os dois.
+func TestArmaEntraAntesDosPontos(t *testing.T) {
+	d := Compute(Score{Str: 100}, Bonus{AtkFis: 1000})
+	if d.AtkFis <= 1000 {
+		t.Errorf("AtkFis = %d, deveria somar arma e pontos", d.AtkFis)
+	}
+}
+
+// A defesa do equipamento recebe o percentual.
+func TestDefesaPercentual(t *testing.T) {
+	d := Compute(Score{}, Bonus{DefFis: 200, DefFisPercent: 50})
+	quer := uint16(200 + 50*(200/100))
+	if d.DefFis != quer {
+		t.Errorf("DefFis = %d, queria %d", d.DefFis, quer)
+	}
+}
+
+// Resistence usa Round, nao Trunc. Com Luck 7 a conta da 0.7: Round devolve 1
+// e Trunc devolveria 0 — e e por isso que a origem usa Round so neste campo.
+func TestResistenceUsaRound(t *testing.T) {
+	if d := Compute(Score{Luck: 7}, Bonus{}); d.Resistence != 1 {
+		t.Errorf("Resistence com Luck 7 = %d, queria 1", d.Resistence)
+	}
+	// Com Luck 5 a conta da exatamente 0.5, e o empate vai para o par: zero.
+	if d := Compute(Score{Luck: 5}, Bonus{}); d.Resistence != 0 {
+		t.Errorf("Resistence com Luck 5 = %d, queria 0 (empate vai para o par)",
+			d.Resistence)
+	}
+}

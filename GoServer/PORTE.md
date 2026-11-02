@@ -71,7 +71,8 @@ de evidências.
 | 10f | Inventário e equipamento do banco, bônus de refino no HP/MP | `Player.pas`, `ItemFunctions.pas` | **pronto** |
 | 10g | Conversa (`$F86`), rotação (`$305`), info de personagem (`$22C`/`$19E`), hora (`$202`) | `PacketHandlers.pas`, `Player.pas` | **pronto** |
 | 10h | Inventário em jogo: mover (`$70F`), descartar (`$32C`), empilhar, gravar na saída | `PacketHandlers.pas`, `ItemFunctions.pas`, `Player.pas` | **pronto** (inventário↔equipamento; armazém, baú de guilda e pran a fazer) |
-| 10i | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10i | Atributos derivados (`GetCurrentScore`), ataque básico (`$302`), morte e revive (`$303`) | `BaseMob.pas`, `PacketHandlers.pas` | **pronto** (sem skill, dungeon, pran nem mascote) |
+| 10j | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -426,6 +427,56 @@ pausa dentro do tratamento de pacote que segurava a thread do jogador.
 destino; com um dos lados já cheio os dois itens trocam de lugar em vez de
 somar; os slots 0 e 1 do equipamento não saem (`srcSlot > 1`); e o slot do
 inventário só funciona se a bolsa correspondente (60 a 63) estiver lá.
+
+**`game.attack`, alcance** — o ataque básico entre jogadores **não checava
+distância nenhuma**: bastava o `ClientID` do alvo para acertá-lo de qualquer
+ponto do mapa. Agora o alvo precisa estar dentro de `AttackRange`.
+
+**`game.attack`, índice de skill** — `DataSkill := @SkillData[Packet.Skill]` com
+`Skill` vindo do cliente como `WORD` num `ARRAY [0..11998]`: lia a tabela fora
+do fim. Nesta fase skill é recusada de todo, e o índice nunca é usado.
+
+**`game.attack`, o aviso de velocidade** — a origem mandava "Outros programas
+detectados." e, se a mensagem repetisse dentro de 5 s, marcava `SocketClosed`,
+derrubando o jogador. O golpe rápido demais agora é só descartado: o limite não
+foi calibrado contra lag real.
+
+**`game.wearWeapon`** — `Dec(Equip[6].MIN, 1)` num `BYTE` sem piso: arma com
+durabilidade zero dava a volta para **255** e voltava a funcionar sozinha. Agora
+o piso é zero.
+
+**`game.revive`** — `RevivePlayer` não checava se o jogador estava morto:
+bastava mandar o `$303` para encher a vida de graça.
+
+**`game.rand`** — `Randomize` era chamado dentro de `GetDamage` **e** de
+`SendDamage`, isto é, o gerador global era reiniciado a cada golpe, com a hora
+como semente: dois golpes no mesmo instante saíam com a mesma sequência. Agora
+o gerador da biblioteca é usado como está.
+
+**`combat.Roller` na sessão** — a roleta de tipo de dano é um vetor de 1000
+posições reusado a cada golpe. Fica na sessão, não numa global, para dois
+jogadores atacando ao mesmo tempo não sortearem no mesmo vetor.
+
+**`game.sessionTarget.Notify`** — as mensagens de absorção saíam por
+`Servers[ChannelId].Players[mob.ClientID].SendClientMessage`, com `Players`
+sendo `ARRAY [1..1000]` e `mob.ClientID` podendo ser id de mob (acima de 1000):
+índice fora do vetor, e isso aparece **oito vezes** só em
+`AttackParseForMobs`. Agora quem entrega a mensagem é a casca que sabe que o
+alvo é jogador.
+
+**`stats.Compute`** — porte de `GetCurrentScore`. As constantes multiplicativas
+(2.6 por força e por agilidade no dano físico, 3.2 por inteligência no mágico, e
+as demais) são as da origem, **inclusive as que lá estão comentadas e não
+somam** — essas ficaram de fora aqui também, para o resultado ser o mesmo. Os
+limites de cada campo são os das funções de `Util.pas` (`IncWord` satura em
+65535, `IncByte` e `IncCritical` em 255, `IncCooldown` em 70, `IncSpeedMove` em
+[15, 70]). `Resistence` é o único campo que usa `Round` em vez de `Trunc`, e
+isso foi mantido.
+
+**`Avatar.RecalcDerived`, velocidade** — `GetCurrentScore` zerava
+`PlayerCharacter.SpeedMove` e recalculava do zero, sobrescrevendo o valor da
+coluna `speedmove`: montaria e buff de velocidade sumiam a cada recálculo.
+Agora o valor gravado só cede quando é zero.
 
 **`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da

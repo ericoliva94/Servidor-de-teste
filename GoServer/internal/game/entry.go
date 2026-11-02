@@ -255,6 +255,11 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	ch.CurrentScore.CurHP = s.Avatar.CurHP
 	ch.CurrentScore.CurMp = s.Avatar.CurMP
 	ch.CurrentScore.Status = src.Status
+	// Os derivados vao no pacote: sem eles o cliente mostra tudo zerado.
+	ch.CurrentScore.DNFis = s.Avatar.AtkFis
+	ch.CurrentScore.DefFis = s.Avatar.DefFis
+	ch.CurrentScore.DNMag = s.Avatar.AtkMag
+	ch.CurrentScore.DefMag = s.Avatar.DefMag
 	ch.CurrentScore.KillPoint = src.KillPoint
 	ch.CurrentScore.Infamia = src.Infamia
 	ch.CurrentScore.SkillPoint = src.SkillPoint

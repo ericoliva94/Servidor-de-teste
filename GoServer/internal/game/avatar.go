@@ -57,15 +57,24 @@ type Avatar struct {
 	// Atributos derivados, o que a origem recalculava em GetCurrentScore.
 	// Ficam zerados enquanto o calculo completo (equipamento, buff, skill)
 	// nao estiver portado; ver GoServer/PORTE.md.
-	AtkFis     uint16
-	DefFis     uint16
-	AtkMag     uint16
-	DefMag     uint16
-	Critical   uint16
-	Esquiva    uint8
-	Acerto     uint8
-	DuploAtk   uint16
-	Resistence uint16
+	AtkFis         uint16
+	DefFis         uint16
+	AtkMag         uint16
+	DefMag         uint16
+	Critical       uint16
+	DamageCritical uint16
+	Esquiva        uint8
+	Acerto         uint8
+	DuploAtk       uint16
+	Resistence     uint16
+	CritRes        uint16
+	ResDamageCrit  uint16
+	DuploRes       uint16
+	FisPenetration uint16
+	MagPenetration uint16
+	HabAtk         uint16
+	CureTax        uint16
+	ReduceCooldown uint16
 
 	// Equip leva o indice visivel de cada slot. A origem usava o campo APP
 	// (aparencia) quando ele era diferente de zero nos slots 2..7.
@@ -129,7 +138,7 @@ func AvatarFromCharacter(src store.Character, nation uint16) Avatar {
 		// mandava o zero ao cliente e o boneco ficava preso no lugar.
 		a.SpeedMove = DefaultSpeedMove
 	}
-	a.RecalcMax()
+	a.Recalc(stats.Bonus{})
 
 	// A origem enviava CurHP como estava e so o limitava ao maximo dentro de
 	// GetCreateMob. Um personagem gravado com CurHP acima do maximo (o que
@@ -173,7 +182,7 @@ func (a *Avatar) ApplyEquipBonus(t itemfn.Tabelas, set store.ItemSet) {
 		return
 	}
 	a.EquipHPMPBonus = itemfn.EquippedHPMPInc(t, set.Slots)
-	a.RecalcMax()
+	a.Recalc(stats.Bonus{})
 	// O teto novo pode ser menor que o HP gravado: trocar de equipamento para
 	// um sem bonus reduz o maximo, e a origem deixava CurHP acima dele.
 	if a.CurHP > a.MaxHP {
@@ -181,6 +190,45 @@ func (a *Avatar) ApplyEquipBonus(t itemfn.Tabelas, set store.ItemSet) {
 	}
 	if a.CurMP > a.MaxMP {
 		a.CurMP = a.MaxMP
+	}
+}
+
+// RecalcDerived refaz os atributos calculados a partir dos pontos.
+//
+// Porte de TBaseMob.GetCurrentScore. Os bonus de equipamento, buff, skill e
+// reliquia entram pelo parametro quando esses sistemas estiverem portados;
+// hoje chegam zerados, e o resultado e o do personagem nu.
+func (a *Avatar) RecalcDerived(b stats.Bonus) {
+	d := stats.Compute(stats.Score{
+		Str: a.Str, Agility: a.Agility, Int: a.Int,
+		Cons: a.Cons, Luck: a.Luck,
+	}, b)
+
+	a.AtkFis = d.AtkFis
+	a.AtkMag = d.AtkMag
+	a.DefFis = d.DefFis
+	a.DefMag = d.DefMag
+	a.DuploAtk = d.DuploAtk
+	a.Critical = d.Critical
+	a.DamageCritical = d.DamageCritical
+	a.FisPenetration = d.FisPenetration
+	a.MagPenetration = d.MagPenetration
+	a.HabAtk = d.HabAtk
+	a.CureTax = d.CureTax
+	a.CritRes = d.CritRes
+	a.ResDamageCrit = d.ResDamageCrit
+	a.DuploRes = d.DuploRes
+	a.Acerto = d.Acerto
+	a.Esquiva = d.Esquiva
+	a.Resistence = d.Resistence
+	a.ReduceCooldown = d.ReduceCooldown
+
+	// SpeedMove vem da conta, mas a coluna do banco manda quando ela traz um
+	// valor: a origem gravava speedmove por personagem e o recalculo o
+	// sobrescrevia, entao montaria e buff de velocidade sumiam a cada
+	// recalculo. Aqui o valor gravado so cede se for zero.
+	if a.SpeedMove == 0 {
+		a.SpeedMove = d.SpeedMove
 	}
 }
 
@@ -196,6 +244,12 @@ func (a *Avatar) RecalcMax() {
 	}
 	a.MaxHP = stats.MaxHP(in)
 	a.MaxMP = stats.MaxMP(in)
+}
+
+// Recalc refaz os derivados e os maximos de uma vez.
+func (a *Avatar) Recalc(b stats.Bonus) {
+	a.RecalcDerived(b)
+	a.RecalcMax()
 }
 
 // VisibleEquip devolve o indice que vai no pacote para cada slot.
