@@ -66,7 +66,9 @@ de evidências.
 | 10a | Servidor TCP, login e `main` que sobe | `LoginSocket.pas`, `AuthHandlers.pas` | **pronto** |
 | 10b | Canal 8822: `CheckLogin` e lista de personagens | `ServerSocket.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** |
 | 10c | Token HTTP 8090 | `TokenSocket.pas`, `AuthHandlers.pas` | **pronto** |
-| 10d | Console, entrada no mundo, movimento | `ConsoleSocket.pas`, `Player.pas` | a fazer |
+| 10d | Entrada no mundo: numérica (`$F02`) e `SendToWorld` (`$925`) | `PacketHandlers.pas`, `Player.pas` | **pronto** |
+| 10e | Registro do canal, movimento (`$301`), spawn (`$349`) e remoção (`$101`) | `ServerSocket.pas`, `BaseMob.pas`, `PacketHandlers.pas` | **pronto** |
+| 10f | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -246,3 +248,82 @@ o que deixa a leitura estável e no mesmo passo de 256 s em que a escrita grava.
 **`model.Item.EquipSellPrice`** — `GetEquipSellPrice` fazia `MIN / MAX` sem
 checar `MAX`: item com durabilidade máxima zero levantava divisão por zero.
 Agora vale preço zero.
+
+**`game.Channel`** — substitui `Servers[n].Players: ARRAY [1..1000] OF TPlayer`.
+No original o índice do vetor *era* o `ClientID`, e cada acesso precisava
+acertar a faixa sozinho; o teste que aparece em `MOB.pas`, `PET.pas`,
+`NPC.pas`, `BaseMob.pas` e `Dungeon.pas` é sempre o mesmo
+`if (i <= MAX_CONNECTIONS)`, **sem limite de baixo**, então `i = 0` lia e
+escrevia antes do início do vetor. Aqui o acesso é por mapa, os ids vão de 1 a
+`MAX_USERS` e id inválido simplesmente não encontra ninguém. A busca por nome
+(`GetPlayerByUsername`, que varria as 1000 posições a cada chamada) virou
+índice.
+
+**`netsrv.DisconnectHandler`** — a limpeza do jogador vivia em
+`Connection.Destroy`, chamado de dezenas de pontos espalhados. Quando um
+caminho de saída não chamava, o jogador ficava no vetor com `Status` igual a
+`Playing` e continuava na lista de visíveis dos outros, que viam um boneco
+parado para sempre. Agora a saída é um ponto só, no fim da goroutine da
+conexão, e roda até se o tratamento tiver entrado em pânico.
+
+**`game.movement`, cabeçalho** — `MovementCommand` repassava o pacote do jeito
+que chegou (`SendToVisible(Packet, Packet.Header.Size, False)`), e
+`Header.Index` é escrito pelo cliente: bastava mandar o id de outro jogador
+para fazer o boneco dele andar na tela de todos os visíveis. Agora o
+cabeçalho repassado leva o id do autor.
+
+**`game.ValidPosition` e o salto absurdo** — em `MovementCommand` a checagem de
+`IsValid` e **toda** a verificação de velocidade estão dentro de um bloco
+comentado: nunca rodaram. NaN e infinito iam direto para `LastPos` e dali para
+todas as contas de distância. Agora coordenada não finita, negativa ou fora do
+mapa é recusada, e salto maior que `DISTANCE_TO_FORGET` num pacote devolve o
+jogador à última posição válida. Não há desconexão: o limite não foi calibrado
+contra lag real, e derrubar quem tem conexão ruim seria pior que o problema.
+
+**Histerese de visibilidade** — `GlobalDefs.pas` declara `DISTANCE_TO_WATCH`
+(50) e `DISTANCE_TO_FORGET` (60), mas o trecho que usa a segunda está
+comentado em `BaseMob.pas:1056`, então o original usava um limite só nos dois
+sentidos. Com um limite só, quem andava em cima da borda entrava e saía da
+lista a cada passo e levava um spawn e um remove por passo. Aqui entra a 50 e
+só sai acima de 60, que é para o que a segunda constante existe.
+
+**`stats.MaxHP` / `stats.MaxMP`** — porte de `GetCurrentHP`/`GetCurrentMP`, que
+apesar do nome devolvem o **máximo**. Lá a conta era em `DWORD` e cada `Inc`
+somava valores que podiam ser negativos (`GetMobAbility` devolve `Integer`),
+dando a volta para perto de 4 bilhões; o piso `if (hp_inc <= 0)` nunca pegava
+isso porque num `DWORD` só o zero satisfaz `<= 0`. Em Go a conta é em `int`
+com sinal e o piso de 1 vale. `GetCurrentMP` também usava
+`ReliqEffect[EF_RELIQUE_PER_HP]` — a constante de HP — no cálculo do MP; aqui o
+percentual chega somado de fora e quem o monta escolhe o efeito certo.
+
+**`game.buildCreateMob`, campo de guilda** — `GetCreateMob` montava
+`GuildIndexAndNation` concatenando texto hexadecimal
+(`StrToInt('$' + IntToStr(Nation) + IntToHex(GuildIndex, 3))`). Com índice de
+guilda acima de `$FFF` o `IntToHex` devolvia 4 dígitos e o número montado
+passava de 16 bits. Agora a nação fica nos bits altos e o índice é mascarado
+nos 12 baixos.
+
+**`game.buildCreateMob`, limite de buffs** — o laço
+`for Index in Self._buffs.Keys do ... Packet.Buffs[i]` incrementava `i` sem
+teto, e a partir do 60º buff escrevia por cima do resto do pacote. Agora para
+no tamanho do vetor.
+
+**`game.buildCreateMob`, MaxMP** — `Packet.MaxMP := Character^.CurrentScore.MaxHP`
+no ramo de mob/NPC: erro de cópia que fazia mob reportar MP máximo igual ao HP.
+Não repetido.
+
+**Nível de título e nível de personagem** — `Packet.Titlelevel := ActiveTitle.Level - 1`
+num `BYTE` e `dst.Level := Level - 1` num `WORD` davam 255 e 65535 para o valor
+zero (sem título, slot vazio). Os dois têm piso em zero agora.
+
+**`store.Characters.ByAccount`, posição de entrada** — o original usava
+`posx`/`posy` do banco direto. Personagem criado por fora, ou com a coluna
+nula, entrava em `0,0`: canto do mapa, fora de qualquer cidade. Agora posição
+gravada só vale se for utilizável, e o resto cai no ponto de partida. Mesma
+ideia para `speedmove` zerado, que deixava o boneco preso no lugar, e para
+`curhp` zerado, que fazia o personagem entrar morto e travado.
+
+**`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
+`SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da
+faixa lia memória fora da tabela. Agora índice inválido responde 0, e a duração
+lida do arquivo é limitada a 24 h para um valor absurdo não virar buff eterno.

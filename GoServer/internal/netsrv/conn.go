@@ -103,6 +103,11 @@ func Marshal(code uint16, v any) ([]byte, error) {
 // ErrNoSocket indica Conn sem socket associado.
 var ErrNoSocket = errors.New("netsrv: conexao sem socket")
 
+// SendRaw escreve bytes JA CIFRADOS. Serve para reenviar a varios
+// destinatarios o mesmo pacote, cifrando uma vez so — e o que o
+// SendToVisible do original fazia passando o mesmo buffer adiante.
+func (c *Conn) SendRaw(packet []byte) error { return c.sendRaw(packet) }
+
 // sendRaw escreve bytes ja cifrados, com trava por conexao.
 func (c *Conn) sendRaw(buf []byte) error {
 	if c == nil || c.nc == nil {

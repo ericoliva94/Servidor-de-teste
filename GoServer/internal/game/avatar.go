@@ -1,0 +1,163 @@
+package game
+
+import (
+	"aika/internal/model"
+	"aika/internal/stats"
+	"aika/internal/store"
+)
+
+// EquipSlots e o tamanho do vetor de equipamento que o pacote de spawn leva.
+const EquipSlots = 8
+
+// Avatar e o personagem em jogo: o que os outros clientes precisam para
+// desenhar o boneco.
+//
+// Na origem isso estava espalhado entre TBaseMob.Character (ponteiro para o
+// registro do personagem), TBaseMob.PlayerCharacter e campos soltos de
+// TPlayer. Aqui fica num lugar so, porque e exatamente o conjunto que
+// GetCreateMob le.
+type Avatar struct {
+	Name      string
+	ClassInfo uint16
+	Level     uint16
+	Nation    uint16
+	// GuildIndex e o indice da guilda; zero e sem guilda.
+	GuildIndex uint16
+	// GuildName vai no campo Title do pacote de spawn.
+	GuildName string
+
+	Str     uint16
+	Agility uint16
+	Int     uint16
+	Cons    uint16
+	Luck    uint16
+
+	Altura uint8
+	Tronco uint8
+	Perna  uint8
+	Corpo  uint8
+
+	CurHP uint32
+	CurMP uint32
+	MaxHP uint32
+	MaxMP uint32
+
+	Rotation  uint32
+	SpeedMove uint16
+
+	// Equip leva o indice visivel de cada slot. A origem usava o campo APP
+	// (aparencia) quando ele era diferente de zero nos slots 2..7.
+	Equip    [EquipSlots]uint16
+	EquipAPP [EquipSlots]uint16
+	// RefineSlot6 e "Equip[6].Refi div 16", que a origem punha em ItemEff[7].
+	RefineSlot6 uint8
+
+	TitleID    uint8
+	TitleLevel uint8
+
+	// PlayerKill marca quem esta com o nome vermelho: a origem somava $80 ao
+	// SpawnType nesse caso.
+	PlayerKill bool
+	// ShopName, quando preenchido, substitui o Title e muda o EffectType,
+	// como a loja pessoal da origem.
+	ShopName string
+}
+
+// AvatarFromCharacter monta o Avatar a partir da linha do banco.
+//
+// MaxHP e MaxMP saem da conta de stats; a origem os recalculava a cada spawn
+// chamando GetCurrentHP/GetCurrentMP, e aqui ficam guardados e sao
+// recalculados por RecalcMax quando algo que entra na conta mudar.
+func AvatarFromCharacter(src store.Character, nation uint16) Avatar {
+	a := Avatar{
+		Name:       src.Name,
+		ClassInfo:  src.ClassInfo,
+		Level:      src.Level,
+		Nation:     nation,
+		GuildIndex: src.GuildIndex,
+		Str:        src.Strength,
+		Agility:    src.Agility,
+		Int:        src.Intelligence,
+		Cons:       src.Constitution,
+		Luck:       src.Luck,
+		Altura:     src.Altura,
+		Tronco:     src.Tronco,
+		Perna:      src.Perna,
+		Corpo:      src.Corpo,
+		CurHP:      src.CurHP,
+		CurMP:      src.CurMP,
+		Rotation:   src.Rotation,
+		SpeedMove:  src.SpeedMove,
+		PlayerKill: src.PlayerKill,
+		TitleID:    uint8(min(src.ActiveTitle, 255)),
+	}
+	if a.SpeedMove == 0 {
+		// Personagem gravado com velocidade zero nao andaria. O original
+		// mandava o zero ao cliente e o boneco ficava preso no lugar.
+		a.SpeedMove = DefaultSpeedMove
+	}
+	a.RecalcMax()
+
+	// A origem enviava CurHP como estava e so o limitava ao maximo dentro de
+	// GetCreateMob. Um personagem gravado com CurHP acima do maximo (o que
+	// acontece ao trocar equipamento com bonus de HP) aparecia com a barra
+	// cheia e morria no primeiro golpe porque o servidor usava o valor cru em
+	// outros lugares. Aqui o teto vale a partir da entrada.
+	if a.CurHP > a.MaxHP {
+		a.CurHP = a.MaxHP
+	}
+	if a.CurMP > a.MaxMP {
+		a.CurMP = a.MaxMP
+	}
+	// Personagem gravado com zero de vida entraria morto e sem poder fazer
+	// nada: a origem tratava isso no login dando 1 de HP.
+	if a.CurHP == 0 {
+		a.CurHP = 1
+	}
+	return a
+}
+
+// RecalcMax refaz HP e MP maximos.
+func (a *Avatar) RecalcMax() {
+	in := stats.Input{
+		ClassInfo: a.ClassInfo,
+		Level:     a.Level,
+		Cons:      a.Cons,
+		Luck:      a.Luck,
+	}
+	a.MaxHP = stats.MaxHP(in)
+	a.MaxMP = stats.MaxMP(in)
+}
+
+// VisibleEquip devolve o indice que vai no pacote para cada slot.
+//
+// Porte da regra de GetCreateMob: os slots 0 e 1 vao sempre com o indice real
+// e os slots 2..7 vao com a aparencia quando ela existe.
+func (a *Avatar) VisibleEquip() [EquipSlots]uint16 {
+	var out [EquipSlots]uint16
+	for i := range out {
+		if i >= 2 && a.EquipAPP[i] != 0 {
+			out[i] = a.EquipAPP[i]
+			continue
+		}
+		out[i] = a.Equip[i]
+	}
+	return out
+}
+
+// Status monta o bloco de atributos para os pacotes que o pedem.
+func (a *Avatar) Status() model.Status {
+	return model.Status{
+		Str:     a.Str,
+		Agility: a.Agility,
+		Int:     a.Int,
+		Cons:    a.Cons,
+		Luck:    a.Luck,
+		Sizes: model.Sizes{
+			Altura: a.Altura, Tronco: a.Tronco,
+			Perna: a.Perna, Corpo: a.Corpo,
+		},
+		CurHP: a.CurHP,
+		CurMp: a.CurMP,
+	}
+}

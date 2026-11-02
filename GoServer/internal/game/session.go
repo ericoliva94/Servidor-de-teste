@@ -5,7 +5,11 @@
 package game
 
 import (
+	"time"
+
 	"aika/internal/auth"
+	"aika/internal/entity"
+	"aika/internal/model"
 	"aika/internal/store"
 )
 
@@ -51,6 +55,41 @@ type Session struct {
 
 	// SelectedSlot e o personagem escolhido, -1 enquanto nenhum.
 	SelectedSlot int
+
+	// Position e a posicao atual. Equivale a
+	// Base.PlayerCharacter.LastPos do original.
+	Position model.Position
+	// AnchorPosition e a posicao em que a lista de visiveis foi calculada
+	// pela ultima vez. No original era Character.LastPos, que servia para o
+	// mesmo fim: so recalcular a cada 3 celulas andadas.
+	AnchorPosition model.Position
+	SpeedMove      uint16
+	// LastMoved e o instante do ultimo passo aceito. Era
+	// TBaseMob.LastMovedTime no original.
+	LastMoved time.Time
+
+	Dead bool
+
+	// OpenedNPC e OpenedOption sao o NPC e a opcao de dialogo abertos.
+	OpenedNPC    uint16
+	OpenedOption uint16
+
+	// Avatar e o personagem escolhido, do jeito que os outros clientes o
+	// veem. So tem conteudo a partir do Playing.
+	Avatar Avatar
+
+	// Base reune as listas de visiveis, buffs e recargas da entidade.
+	Base EntityState
+}
+
+// EntityState e a parte de TBaseMob que a sessao carrega.
+type EntityState struct {
+	VisiblePlayers entity.VisibleSet
+	VisibleMobs    entity.VisibleSet
+	VisibleNPCs    entity.VisibleSet
+	Buffs          *entity.Buffs
+	Cooldowns      *entity.Cooldowns
+	Targets        *entity.TargetList
 }
 
 // NewSession cria a sessao de uma conexao nova.
@@ -59,5 +98,10 @@ func NewSession(channel uint8) *Session {
 		Channel:      channel,
 		Status:       WaitingLogin,
 		SelectedSlot: -1,
+		Base: EntityState{
+			Buffs:     entity.NewBuffs(),
+			Cooldowns: entity.NewCooldowns(),
+			Targets:   entity.NewTargetList(),
+		},
 	}
 }

@@ -100,6 +100,11 @@ type Server struct {
 	MaxUsers uint16
 	Channels int
 
+	// DistanceToWatch e DistanceToForget sao DISTANCE_TO_WATCH e
+	// DISTANCE_TO_FORGET da secao GAMESERVERCONF.
+	DistanceToWatch  uint16
+	DistanceToForget uint16
+
 	MySQLServer   string
 	MySQLPort     int
 	MySQLDatabase string
@@ -142,6 +147,9 @@ func FromINI(ini *INI) Server {
 		MaxUsers: maxUsers,
 		Channels: ini.Int("Server", "Channels", 1),
 
+		DistanceToWatch:  clampDistance(ini.Int("GAMESERVERCONF", "DISTANCE_TO_WATCH", 50)),
+		DistanceToForget: clampDistance(ini.Int("GAMESERVERCONF", "DISTANCE_TO_FORGET", 60)),
+
 		MySQLServer:   ini.String("MySQL", "Server", "127.0.0.1"),
 		MySQLPort:     ini.Int("MySQL", "Port", 3306),
 		MySQLDatabase: ini.String("MySQL", "Database", "aika_db4"),
@@ -153,4 +161,17 @@ func FromINI(ini *INI) Server {
 		TokenAddr:   fmt.Sprintf(":%d", DefaultTokenPort),
 		ConsoleAddr: fmt.Sprintf("127.0.0.1:%d", DefaultConsolePort),
 	}
+}
+
+// clampDistance limita a distancia de visao a faixa do WORD em que ela e
+// usada. O original lia o valor com ReadInteger e o guardava num WORD: um
+// numero negativo ou acima de 65535 no arquivo entrava truncado, sem aviso.
+func clampDistance(v int) uint16 {
+	if v < 0 {
+		return 0
+	}
+	if v > 65535 {
+		return 65535
+	}
+	return uint16(v)
 }

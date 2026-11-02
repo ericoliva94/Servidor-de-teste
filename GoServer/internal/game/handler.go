@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"aika/internal/auth"
+	"aika/internal/entity"
 	"aika/internal/model"
 	"aika/internal/netsrv"
 	"aika/internal/packets"
@@ -45,8 +46,16 @@ type Handler struct {
 	Accounts auth.Accounts
 	Chars    Characters
 	Numerics NumericStore
-	Now      func() time.Time
-	Log      *slog.Logger
+	// Chan e o registro de quem esta conectado a este canal.
+	Chan *Channel
+	// WatchDistance e o DISTANCE_TO_WATCH do .ini; zero usa o padrao.
+	WatchDistance uint16
+	// ForgetDistance e o DISTANCE_TO_FORGET do .ini; zero usa o padrao.
+	ForgetDistance uint16
+	// Durations da a duracao dos buffs (SkillData); nil trata tudo como 0.
+	Durations entity.Durations
+	Now       func() time.Time
+	Log       *slog.Logger
 	// ServerVersion e o SERVER_VERSION do .ini, so para registro: o original
 	// aceita qualquer versao e apenas anota a diferenca.
 	ServerVersion uint16
@@ -73,6 +82,8 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.checkLogin(ctx, c, s, p)
 	case CodeNumericToken:
 		return h.numericToken(ctx, c, s, p)
+	case CodeMovement:
+		return h.movement(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta
@@ -157,10 +168,51 @@ func (h *Handler) checkLogin(ctx context.Context, c *netsrv.Conn, s *Session, p 
 	s.Account = acc
 	s.Characters = chars
 
+	// O ClientID sai do registro do canal, nao de uma varredura de vetor.
+	//
+	// O original percorria Players[1..MAX_CONNECTIONS] procurando slot livre
+	// e, quando nao achava, seguia com o indice do fim do laco: o jogador
+	// novo escrevia por cima do ultimo slot, que era de outra pessoa.
+	if h.Chan != nil {
+		id, err := h.Chan.Join(c, s)
+		if err != nil {
+			h.message(c, "Servidor cheio. Tente novamente em instantes.")
+			c.Close()
+			return err
+		}
+		h.log().Debug("id de cliente alocado", "usuario", username, "id", id)
+	}
+
 	h.log().Info("usuario conectado",
-		"usuario", username, "conta", acc.ID, "canal", h.Channel, "ip", c.IP())
+		"usuario", username, "conta", acc.ID, "canal", h.Channel,
+		"id", s.ClientID, "ip", c.IP())
 
 	return h.sendCharList(c, s)
+}
+
+// OnDisconnect tira o jogador do canal e da tela de quem o via.
+//
+// Implementa netsrv.DisconnectHandler. No original a limpeza vivia no
+// Connection.Destroy e dependia de cada caminho de saida chamar o Destroy;
+// quando um nao chamava, o jogador ficava no vetor Players com Status Playing
+// e continuava na lista de visiveis dos outros, que viam um boneco parado.
+func (h *Handler) OnDisconnect(c *netsrv.Conn) {
+	s, _ := c.Session.(*Session)
+	if s == nil {
+		return
+	}
+	if s.Status >= Playing {
+		h.removeFromEveryone(s)
+	}
+	if h.Chan != nil && s.ClientID != 0 {
+		h.Chan.Leave(s.ClientID)
+	}
+	s.Status = WaitingLogin
+	if s.Username != "" {
+		h.log().Info("usuario desconectado",
+			"usuario", s.Username, "id", s.ClientID,
+			"canal", h.Channel, "ip", c.IP())
+	}
 }
 
 // sendCharList monta e envia o $901. Porte de TPlayer.SendCharList.
@@ -242,6 +294,21 @@ func (h *Handler) now() time.Time {
 	}
 	return time.Now()
 }
+
+// durations devolve a tabela de duracao de buffs, ou uma vazia.
+func (h *Handler) durations() entity.Durations {
+	if h.Durations != nil {
+		return h.Durations
+	}
+	return zeroDurations{}
+}
+
+// zeroDurations trata todo buff como de duracao zero. E o que acontecia no
+// original quando SkillData nao havia sido carregado: o registro vinha
+// zerado e o buff expirava na hora.
+type zeroDurations struct{}
+
+func (zeroDurations) BuffSeconds(uint16) int { return 0 }
 
 func (h *Handler) log() *slog.Logger {
 	if h.Log != nil {

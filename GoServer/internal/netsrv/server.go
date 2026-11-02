@@ -37,6 +37,18 @@ func (f HandlerFunc) HandlePacket(ctx context.Context, c *Conn, p protocol.Packe
 	return f(ctx, c, p)
 }
 
+// DisconnectHandler e implementado pelo Handler que precisa saber quando uma
+// conexao termina.
+//
+// Existe porque o original limpava o slot do jogador no Connection.Destroy,
+// chamado de dezenas de pontos espalhados, e quando um deles nao chamava o
+// jogador ficava para sempre na lista de visiveis dos outros: eles viam um
+// boneco parado que nao respondia. Aqui a saida e um lugar so, no fim da
+// goroutine da conexao, e roda mesmo que o tratamento tenha entrado em panico.
+type DisconnectHandler interface {
+	OnDisconnect(c *Conn)
+}
+
 // Config descreve o servidor.
 type Config struct {
 	// Name aparece no log.
@@ -195,6 +207,20 @@ func (s *Server) serveConn(ctx context.Context, nc net.Conn) {
 		log:          s.log,
 	}
 	defer nc.Close()
+
+	// A saida da conexao avisa o handler antes de qualquer outra coisa do
+	// defer: e o unico ponto em que o jogador sai do canal.
+	if dh, ok := s.handler.(DisconnectHandler); ok {
+		defer func() {
+			defer func() {
+				if p := recover(); p != nil {
+					s.log.Error("panico ao desconectar",
+						"servidor", s.cfg.Name, "ip", c.ip, "panico", p)
+				}
+			}()
+			dh.OnDisconnect(c)
+		}()
+	}
 
 	// Uma excecao no tratamento de um pacote derrubava a thread do jogador no
 	// original, deixando o socket aberto e o slot preso. Aqui o panico fica

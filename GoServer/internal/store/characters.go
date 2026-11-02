@@ -37,6 +37,22 @@ type Character struct {
 	CurMP uint32
 	Honor uint32
 
+	Status     uint16
+	KillPoint  uint32
+	Infamia    uint32
+	SkillPoint uint16
+
+	// PosX e PosY sao as colunas posx/posy: onde o personagem estava ao sair.
+	PosX float32
+	PosY float32
+	// SpeedMove e Rotation vem das colunas de mesmo nome.
+	SpeedMove uint16
+	Rotation  uint32
+	// PlayerKill marca o nome vermelho.
+	PlayerKill bool
+	// ActiveTitle e a coluna active_title.
+	ActiveTitle uint16
+
 	NumericToken  string
 	NumericErrors uint8
 	Deleted       bool
@@ -64,6 +80,8 @@ func (c Characters) ByAccount(ctx context.Context, accountID uint32) ([MaxCharac
 		       strength, agility, intelligence, constitution, luck,
 		       altura, tronco, perna, corpo,
 		       curhp, curmp, honor,
+		       status, killpoint, infamia, skillpoint,
+		       posx, posy, speedmove, rotation, playerkill, active_title,
 		       numeric_token, numeric_errors, deleted, delete_time
 		  FROM characters
 		 WHERE owner_accid = :acc
@@ -91,6 +109,16 @@ func (c Characters) ByAccount(ctx context.Context, accountID uint32) ([MaxCharac
 			curhp      int64
 			curmp      int64
 			honor      int64
+			status     int64
+			killpoint  int64
+			infamia    int64
+			skillpoint int64
+			posx       sql.NullFloat64
+			posy       sql.NullFloat64
+			speedmove  int64
+			rotation   int64
+			playerkill int64
+			actTitle   int64
 			name       sql.NullString
 			numTok     sql.NullString
 			numErr     int64
@@ -100,6 +128,8 @@ func (c Characters) ByAccount(ctx context.Context, accountID uint32) ([MaxCharac
 		if err := rows.Scan(&ch.ID, &slot, &name, &classInfo, &level, &ch.Exp,
 			&ch.Gold, &guild, &str, &agi, &intel, &con, &luck,
 			&alt, &tro, &per, &cor, &curhp, &curmp, &honor,
+			&status, &killpoint, &infamia, &skillpoint,
+			&posx, &posy, &speedmove, &rotation, &playerkill, &actTitle,
 			&numTok, &numErr, &deleted, &deleteTime); err != nil {
 			return out, avisos, fmt.Errorf("store: ler personagem: %w", err)
 		}
@@ -128,6 +158,19 @@ func (c Characters) ByAccount(ctx context.Context, accountID uint32) ([MaxCharac
 		ch.CurHP = clampToDword(curhp)
 		ch.CurMP = clampToDword(curmp)
 		ch.Honor = clampToDword(honor)
+		ch.Status = clampToWord(status)
+		ch.KillPoint = clampToDword(killpoint)
+		ch.Infamia = clampToDword(infamia)
+		ch.SkillPoint = clampToWord(skillpoint)
+		// posx/posy sao FLOAT no banco e podem vir nulos num personagem
+		// criado por fora; nulo fica zerado e quem entra no mundo escolhe o
+		// ponto de partida.
+		ch.PosX = float32(posx.Float64)
+		ch.PosY = float32(posy.Float64)
+		ch.SpeedMove = clampToWord(speedmove)
+		ch.Rotation = clampToDword(rotation)
+		ch.PlayerKill = playerkill != 0
+		ch.ActiveTitle = clampToWord(actTitle)
 		ch.NumericToken = numTok.String
 		ch.NumericErrors = clampToByte(numErr)
 		ch.Deleted = deleted != 0

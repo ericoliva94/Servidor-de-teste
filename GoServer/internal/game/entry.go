@@ -220,15 +220,67 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	netsrv.PutCString(ch.Numeric[:], src.NumericToken)
 
 	s.SelectedSlot = slot
+	s.Avatar = AvatarFromCharacter(src, uint16(s.Account.Nation))
+	s.SpeedMove = s.Avatar.SpeedMove
+	s.Position = entryPosition(src)
+	s.AnchorPosition = s.Position
+	s.Dead = false
+	s.LastMoved = h.now()
+
+	// O pacote leva o maximo calculado, nao o que estava no banco: o banco
+	// guarda so o HP atual.
+	ch.CurrentScore.MaxHp = s.Avatar.MaxHP
+	ch.CurrentScore.MaxMP = s.Avatar.MaxMP
+	ch.CurrentScore.CurHP = s.Avatar.CurHP
+	ch.CurrentScore.CurMp = s.Avatar.CurMP
+	ch.CurrentScore.Status = src.Status
+	ch.CurrentScore.KillPoint = src.KillPoint
+	ch.CurrentScore.Infamia = src.Infamia
+	ch.CurrentScore.SkillPoint = src.SkillPoint
+	ch.ActiveTitle = src.ActiveTitle
+
 	s.Status = Playing
 	s.SubStatus = Playing
 
 	h.log().Info("personagem entrou no mundo",
-		"usuario", s.Username, "personagem", src.Name,
-		"slot", slot, "nivel", src.Level, "canal", h.Channel)
+		"usuario", s.Username, "personagem", src.Name, "id", s.ClientID,
+		"slot", slot, "nivel", src.Level, "hp", s.Avatar.MaxHP,
+		"mp", s.Avatar.MaxMP, "canal", h.Channel)
 
-	return c.SendStruct(CodeSendToWorld, pkt)
+	if err := c.SendStruct(CodeSendToWorld, pkt); err != nil {
+		return err
+	}
+
+	// Com o jogador em jogo, ele e os vizinhos passam a se ver. Isto so pode
+	// acontecer depois do $925: antes dele o cliente nao tem mundo desenhado
+	// e descartaria os spawns.
+	h.refreshVisible(s)
+	return nil
 }
+
+// entryPosition decide onde o personagem entra.
+//
+// O original usava posx/posy do banco direto, sem olhar o valor: personagem
+// criado por fora, ou gravado com a coluna nula, entrava em 0,0 — canto do
+// mapa, fora de qualquer cidade, onde nao da para fazer nada. Aqui a posicao
+// gravada so vale se for utilizavel, e o resto cai no ponto de partida.
+func entryPosition(src store.Character) model.Position {
+	p := model.Position{X: src.PosX, Y: src.PosY}
+	if p.X == 0 && p.Y == 0 {
+		return StartPosition
+	}
+	if !ValidPosition(p) {
+		return StartPosition
+	}
+	return p
+}
+
+// DefaultSpeedMove e a velocidade de caminhada padrao, usada quando a coluna
+// speedmove esta zerada.
+const DefaultSpeedMove = 20
+
+// StartPosition e onde o personagem entra sem posicao gravada valida.
+var StartPosition = model.Position{X: 2100, Y: 2100}
 
 // numericField le a numerica de um campo de tamanho fixo.
 func numericField(b []byte) string {

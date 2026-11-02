@@ -113,18 +113,26 @@ func run() error {
 		Log:      log,
 	}, &auth.Handler{Accounts: accounts})
 
+	// O canal guarda quem esta conectado e aloca o ClientID. Sem ele o
+	// servidor atende o login mas ninguem ve ninguem.
+	canal := game.NewChannel(0, cfg.MaxUsers)
+
 	channelSrv := netsrv.New(netsrv.Config{
 		Name:     "canal",
 		Addr:     cfg.ChannelAddr,
 		MaxConns: int(cfg.MaxUsers),
 		Log:      log,
 	}, &game.Handler{
-		Channel:       0,
-		Accounts:      accounts,
-		Chars:         chars,
-		Numerics:      numerics,
-		Log:           log,
-		ServerVersion: uint16(cfg.Version),
+		Channel:        0,
+		Chan:           canal,
+		Accounts:       accounts,
+		Chars:          chars,
+		Numerics:       numerics,
+		Durations:      tables,
+		WatchDistance:  cfg.DistanceToWatch,
+		ForgetDistance: cfg.DistanceToForget,
+		Log:            log,
+		ServerVersion:  uint16(cfg.Version),
 	})
 
 	// Abre as portas antes de anunciar: o original so descobria falha de bind
@@ -142,7 +150,8 @@ func run() error {
 		tokenSrv = tokensrv.New(tokensrv.Config{
 			Addr: cfg.TokenAddr,
 			Log:  log,
-		}, tokens, onlineCounter{loginSrv: loginSrv, channelSrv: channelSrv})
+		}, tokens, onlineCounter{
+			loginSrv: loginSrv, channelSrv: channelSrv, canal: canal})
 		if err := tokenSrv.Listen(); err != nil {
 			return err
 		}
@@ -151,6 +160,8 @@ func run() error {
 	campos := []any{
 		"login", loginSrv.Addr().String(),
 		"canal", channelSrv.Addr().String(),
+		"ver", cfg.DistanceToWatch,
+		"esquecer", cfg.DistanceToForget,
 	}
 	if tokenSrv != nil {
 		campos = append(campos, "token", tokenSrv.Addr().String())
@@ -189,9 +200,16 @@ func run() error {
 type onlineCounter struct {
 	loginSrv   *netsrv.Server
 	channelSrv *netsrv.Server
+	canal      *game.Channel
 }
 
 func (o onlineCounter) OnlinePlayers() int {
+	if o.canal != nil {
+		// Conta quem esta em jogo, nao socket aberto: o original somava
+		// conexoes e a lista de servidores mostrava gente que ainda estava
+		// na tela de login.
+		return o.canal.Count()
+	}
 	return int(o.channelSrv.Conns())
 }
 

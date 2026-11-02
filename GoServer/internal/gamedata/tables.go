@@ -149,3 +149,25 @@ func (t *Tables) ExpFor(level int) uint64 {
 	}
 	return t.Exp[level]
 }
+
+// BuffSeconds devolve a duracao do buff de indice i, em segundos.
+//
+// Implementa entity.Durations. Na origem isto era SkillData[Index].Duration
+// com SkillData sendo ARRAY [0..11998] acessado sem checagem: um indice de
+// buff acima da faixa lia memoria fora da tabela. Aqui indice invalido, ou
+// tabela nao carregada, responde 0 — o buff expira na hora em vez de durar
+// um tempo tirado de memoria qualquer.
+func (t *Tables) BuffSeconds(i uint16) int {
+	s := t.Skill(int(i))
+	if s == nil {
+		return 0
+	}
+	// Duration e DWORD no arquivo; um valor absurdo viraria um buff eterno.
+	if s.Duration > maxBuffSeconds {
+		return maxBuffSeconds
+	}
+	return int(s.Duration)
+}
+
+// maxBuffSeconds limita a duracao lida do arquivo a 24 horas.
+const maxBuffSeconds = 24 * 60 * 60
