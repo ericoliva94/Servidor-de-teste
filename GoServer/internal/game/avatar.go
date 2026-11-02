@@ -54,6 +54,19 @@ type Avatar struct {
 	Rotation  uint32
 	SpeedMove uint16
 
+	// Atributos derivados, o que a origem recalculava em GetCurrentScore.
+	// Ficam zerados enquanto o calculo completo (equipamento, buff, skill)
+	// nao estiver portado; ver GoServer/PORTE.md.
+	AtkFis     uint16
+	DefFis     uint16
+	AtkMag     uint16
+	DefMag     uint16
+	Critical   uint16
+	Esquiva    uint8
+	Acerto     uint8
+	DuploAtk   uint16
+	Resistence uint16
+
 	// Equip leva o indice visivel de cada slot. A origem usava o campo APP
 	// (aparencia) quando ele era diferente de zero nos slots 2..7.
 	Equip    [EquipSlots]uint16

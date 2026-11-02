@@ -237,3 +237,171 @@ func TestTabelaVaziaNaoQuebra(t *testing.T) {
 		t.Errorf("soma = %d, queria 0", got)
 	}
 }
+
+// ---- empilhamento
+
+func TestAgroupJuntaAsDuasPilhas(t *testing.T) {
+	tb := novasTabelas()
+	tb.itens[1] = gamedata.ItemFromList{CanAgroup: 1}
+
+	src := model.Item{Index: 1, Refi: 30}
+	dest := model.Item{Index: 1, Refi: 20}
+	if !Agroup(tb, &src, &dest) {
+		t.Fatal("deveria ter juntado numa pilha so")
+	}
+	// A origem junta na origem e esvazia o destino.
+	if src.Refi != 50 {
+		t.Errorf("origem = %d, queria 50", src.Refi)
+	}
+	if !dest.IsEmpty() {
+		t.Errorf("destino = %+v, queria vazio", dest)
+	}
+}
+
+// Acima do teto a sobra fica no destino.
+func TestAgroupDeixaSobraNoDestino(t *testing.T) {
+	tb := novasTabelas()
+	tb.itens[1] = gamedata.ItemFromList{CanAgroup: 1}
+
+	src := model.Item{Index: 1, Refi: 900}
+	dest := model.Item{Index: 1, Refi: 300}
+	if Agroup(tb, &src, &dest) {
+		t.Error("nao deveria ter caido numa pilha so")
+	}
+	if src.Refi != MaxSlotAmount {
+		t.Errorf("origem = %d, queria %d", src.Refi, MaxSlotAmount)
+	}
+	if dest.Refi != 200 {
+		t.Errorf("destino = %d, queria 200", dest.Refi)
+	}
+}
+
+// Com um dos lados cheio, a origem trocava os dois de lugar.
+func TestAgroupComLadoCheioTroca(t *testing.T) {
+	tb := novasTabelas()
+	tb.itens[1] = gamedata.ItemFromList{CanAgroup: 1}
+
+	src := model.Item{Index: 1, Refi: MaxSlotAmount}
+	dest := model.Item{Index: 1, Refi: 500}
+	if !Agroup(tb, &src, &dest) {
+		t.Error("a troca devolve true na origem")
+	}
+	if src.Refi != 500 || dest.Refi != MaxSlotAmount {
+		t.Errorf("trocou errado: %d / %d", src.Refi, dest.Refi)
+	}
+}
+
+// Item que nao empilha nao junta.
+func TestAgroupSoValeParaEmpilhavel(t *testing.T) {
+	tb := novasTabelas()
+	tb.itens[1] = gamedata.ItemFromList{CanAgroup: 0}
+	src := model.Item{Index: 1, Refi: 3}
+	dest := model.Item{Index: 1, Refi: 4}
+	if Agroup(tb, &src, &dest) {
+		t.Error("nao deveria juntar")
+	}
+	if src.Refi != 3 || dest.Refi != 4 {
+		t.Errorf("mexeu nas pilhas: %d / %d", src.Refi, dest.Refi)
+	}
+	// Nil nao quebra.
+	if Agroup(tb, nil, &dest) || Agroup(tb, &src, nil) {
+		t.Error("nil deveria devolver false")
+	}
+}
+
+// O bug do DecreaseAmount: "(item.Refi - Quanti) > 0" com os dois WORD dava a
+// volta, e tirar 2 de uma pilha de 1 deixava 65535.
+func TestDecreaseAmountNaoDaVolta(t *testing.T) {
+	it := model.Item{Index: 1, Refi: 1}
+	DecreaseAmount(&it, 2)
+	if !it.IsEmpty() {
+		t.Errorf("item = %+v, queria vazio", it)
+	}
+
+	it2 := model.Item{Index: 1, Refi: 10}
+	DecreaseAmount(&it2, 3)
+	if it2.Refi != 7 {
+		t.Errorf("sobrou %d, queria 7", it2.Refi)
+	}
+
+	it3 := model.Item{Index: 1, Refi: 5}
+	DecreaseAmount(&it3, 5)
+	if !it3.IsEmpty() {
+		t.Errorf("item = %+v, queria vazio", it3)
+	}
+	DecreaseAmount(nil, 1) // nao quebra
+}
+
+// AddAmount nao passa do teto nem da a volta no WORD.
+func TestAddAmountTemTeto(t *testing.T) {
+	tb := novasTabelas()
+	tb.itens[1] = gamedata.ItemFromList{CanAgroup: 1}
+
+	it := model.Item{Index: 1, Refi: 900}
+	AddAmount(tb, &it, 500)
+	if it.Refi != MaxSlotAmount {
+		t.Errorf("= %d, queria %d", it.Refi, MaxSlotAmount)
+	}
+
+	it2 := model.Item{Index: 1, Refi: 65000}
+	AddAmount(tb, &it2, 1000)
+	if it2.Refi != MaxSlotAmount {
+		t.Errorf("= %d, queria %d", it2.Refi, MaxSlotAmount)
+	}
+}
+
+func TestSetAmountSoValeParaEmpilhavel(t *testing.T) {
+	tb := novasTabelas()
+	tb.itens[1] = gamedata.ItemFromList{CanAgroup: 1}
+	tb.itens[2] = gamedata.ItemFromList{CanAgroup: 0}
+
+	it := model.Item{Index: 1, Refi: 5}
+	SetAmount(tb, &it, 42)
+	if it.Refi != 42 {
+		t.Errorf("= %d, queria 42", it.Refi)
+	}
+
+	// Item nao empilhavel usa o campo Refi para o refino: mexer nele
+	// mudaria o refino do equipamento.
+	eq := model.Item{Index: 2, Refi: 48}
+	SetAmount(tb, &eq, 1)
+	if eq.Refi != 48 {
+		t.Errorf("refino mudou para %d", eq.Refi)
+	}
+}
+
+// Indice fora da tabela nao empilha e nao le memoria alheia.
+func TestCanAgroupComIndiceInexistente(t *testing.T) {
+	tb := novasTabelas()
+	if CanAgroup(tb, 9999) {
+		t.Error("item que nao existe nao empilha")
+	}
+	if CanAgroup(nil2(), 1) {
+		t.Error("tabela vazia nao empilha")
+	}
+}
+
+func nil2() Tabelas { return &tabelasFalsas{itens: map[int]gamedata.ItemFromList{}} }
+
+// Os acessores devolvem zero para indice que nao existe, em vez de ler fora
+// do vetor como ItemList fazia.
+func TestAcessoresComIndiceInexistente(t *testing.T) {
+	tb := novasTabelas()
+	if ItemType(tb, 9999) != 0 || ItemLevel(tb, 9999) != 0 ||
+		ItemClass(tb, 9999) != 0 || TypeTrade(tb, 9999) != 0 ||
+		Rank(tb, 9999) != 0 || UseEffect(tb, 9999) != 0 {
+		t.Error("indice inexistente deveria dar zero em tudo")
+	}
+	tb.itens[5] = gamedata.ItemFromList{
+		ItemType: 2, Level: 10, Classe: 1, TypeTrade: 1, Rank: 3, UseEffect: 7}
+	if ItemType(tb, 5) != 2 || ItemLevel(tb, 5) != 10 || ItemClass(tb, 5) != 1 ||
+		TypeTrade(tb, 5) != 1 || Rank(tb, 5) != 3 || UseEffect(tb, 5) != 7 {
+		t.Error("acessores leram errado")
+	}
+}
+
+func TestAmount(t *testing.T) {
+	if got := Amount(model.Item{Refi: 77}); got != 77 {
+		t.Errorf("= %d, queria 77", got)
+	}
+}

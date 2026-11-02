@@ -250,6 +250,10 @@ func (noItems) Cash(context.Context, uint32) (store.ItemSet, error) {
 	return store.ItemSet{Slots: make([]model.Item, store.CashSlots)}, nil
 }
 
+func (noItems) SaveEquip(context.Context, uint32, store.ItemSet) error { return nil }
+
+func (noItems) SaveInventory(context.Context, uint32, store.ItemSet) error { return nil }
+
 // noAccounts recusa todo login. Usado com -no-db.
 type noAccounts struct{}
 

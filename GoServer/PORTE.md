@@ -70,7 +70,8 @@ de evidências.
 | 10e | Registro do canal, movimento (`$301`), spawn (`$349`) e remoção (`$101`) | `ServerSocket.pas`, `BaseMob.pas`, `PacketHandlers.pas` | **pronto** |
 | 10f | Inventário e equipamento do banco, bônus de refino no HP/MP | `Player.pas`, `ItemFunctions.pas` | **pronto** |
 | 10g | Conversa (`$F86`), rotação (`$305`), info de personagem (`$22C`/`$19E`), hora (`$202`) | `PacketHandlers.pas`, `Player.pas` | **pronto** |
-| 10h | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10h | Inventário em jogo: mover (`$70F`), descartar (`$32C`), empilhar, gravar na saída | `PacketHandlers.pas`, `ItemFunctions.pas`, `Player.pas` | **pronto** (inventário↔equipamento; armazém, baú de guilda e pran a fazer) |
+| 10i | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -380,6 +381,51 @@ Agora é um índice por nome, mantido na entrada e na saída do jogador.
 **Canais de conversa ainda não portados** — grupo, guilda, aliança, nação e
 megafone respondem uma mensagem dizendo que não estão disponíveis. Na origem o
 jogador digitava e nada acontecia, sem nenhum retorno.
+
+**`game.moveItem`, ponteiro nulo** — `MoveItem` iniciava `srcItem` e `destItem`
+em `nil` e só os preenchia dentro dos ramos do `case`. Um `SrcType` ou
+`DestType` fora da lista deixava o ponteiro nulo e, poucas linhas abaixo,
+`if((ItemList[destItem.Index].ItemType = 8) and (ItemList[srcItem.Index].ItemType = 8))`
+o dereferenciava: **qualquer cliente derrubava a thread do próprio jogador
+mandando um tipo de slot qualquer**. No Go os dois lados são resolvidos antes
+de qualquer uso e tipo não suportado é recusado.
+
+Arrastar um slot sobre ele mesmo também seguia adiante na origem: com pilha de
+itens, `AgroupItem(src, dest)` com `src == dest` dobrava a quantidade. Agora é
+recusado.
+
+**`itemfn.DecreaseAmount`** — o teste era `(item.Refi - Quanti) > 0` com os dois
+`WORD`: a subtração dava a volta, e tirar 2 unidades de uma pilha de 1 deixava
+**65535**. Agora a conta é com sinal.
+
+**`itemfn.AddAmount`** — `SetItemAmount(..., Somar=True)` fazia
+`Inc(item.Refi, quant)` num `WORD` sem teto; somar acima de 65535 dava a volta e
+a pilha virava um punhado. Agora há teto em `MAX_SLOT_AMOUNT`.
+
+**`store.Items.SaveSet`** — a origem montava o `INSERT` concatenando texto,
+inclusive `Identific`, que é `Integer` com sinal e vem de dados do jogador.
+Agora os valores vão como parâmetros. A estratégia `DELETE` + `INSERT` dentro de
+uma transação foi mantida: é a que casa com o formato da tabela, que não tem
+chave única por slot.
+
+**Gravação na saída** — `SaveInGame` era chamado de vários pontos e a gravação
+de desconexão dependia de o caminho de saída chegar lá; quando não chegava,
+tudo que o jogador tinha movido na sessão era perdido. Agora a gravação fica no
+mesmo ponto único de saída que tira o jogador do canal, com prazo próprio para
+não segurar a goroutine da conexão.
+
+**`game.sendStatus`** — `SendStatus` terminava chamando `RequestAllAttributes`
+com um buffer local `Array [0..12] of Byte` zerado só nos **12** primeiros,
+passado a um handler que o lê como pacote: o 13º byte ia com lixo de pilha.
+
+**`game.sendCurrentHPMP`** — `SendCurrentHPMP` terminava com `Sleep(1)`, uma
+pausa dentro do tratamento de pacote que segurava a thread do jogador.
+
+**Mantido de propósito** — `ReinforceFromItem` usa `Round` e o `ItemEff[7]` usa
+`div 16` (ver acima); a pilha junta fica no slot de **origem**, não no de
+destino; com um dos lados já cheio os dois itens trocam de lugar em vez de
+somar; os slots 0 e 1 do equipamento não saem (`srcSlot > 1`); e o slot do
+inventário só funciona se a bolsa correspondente (60 a 63) estiver lá.
 
 **`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da

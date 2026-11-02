@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"testing"
@@ -655,6 +656,8 @@ type itensFalsos struct {
 	equip map[uint32]store.ItemSet
 	inv   map[uint32]store.ItemSet
 	erro  error
+	// gravados guarda o que SaveEquip e SaveInventory receberam.
+	gravados map[string]store.ItemSet
 }
 
 func (f itensFalsos) Equip(_ context.Context, id uint32) (store.ItemSet, error) {
@@ -675,6 +678,20 @@ func (f itensFalsos) Inventory(_ context.Context, id uint32) (store.ItemSet, err
 		return s, nil
 	}
 	return store.ItemSet{Slots: make([]model.Item, store.InventorySlots)}, nil
+}
+
+func (f itensFalsos) SaveEquip(_ context.Context, id uint32, set store.ItemSet) error {
+	if f.gravados != nil {
+		f.gravados[fmt.Sprintf("equip:%d", id)] = set
+	}
+	return f.erro
+}
+
+func (f itensFalsos) SaveInventory(_ context.Context, id uint32, set store.ItemSet) error {
+	if f.gravados != nil {
+		f.gravados[fmt.Sprintf("inv:%d", id)] = set
+	}
+	return f.erro
 }
 
 func (f itensFalsos) Storage(_ context.Context, _ uint32) (store.ItemSet, error) {

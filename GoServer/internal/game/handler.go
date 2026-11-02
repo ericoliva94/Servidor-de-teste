@@ -41,12 +41,14 @@ type Characters interface {
 	ByAccount(ctx context.Context, accountID uint32) ([store.MaxCharacterSlots]store.Character, []string, error)
 }
 
-// ItemSource busca os itens de um personagem e de uma conta.
+// ItemSource busca e grava os itens de um personagem e de uma conta.
 type ItemSource interface {
 	Equip(ctx context.Context, charID uint32) (store.ItemSet, error)
 	Inventory(ctx context.Context, charID uint32) (store.ItemSet, error)
 	Storage(ctx context.Context, accountID uint32) (store.ItemSet, error)
 	Cash(ctx context.Context, accountID uint32) (store.ItemSet, error)
+	SaveEquip(ctx context.Context, charID uint32, set store.ItemSet) error
+	SaveInventory(ctx context.Context, charID uint32, set store.ItemSet) error
 }
 
 // Handler atende os pacotes do canal.
@@ -105,6 +107,10 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.requestCharInfo(ctx, c, s, p)
 	case CodeRequestTime:
 		return h.requestServerTime(ctx, c, s, p)
+	case CodeMoveItem:
+		return h.moveItem(ctx, c, s, p)
+	case CodeDeleteItem:
+		return h.deleteItem(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta
@@ -223,6 +229,9 @@ func (h *Handler) OnDisconnect(c *netsrv.Conn) {
 		return
 	}
 	if s.Status >= Playing {
+		// Gravar antes de tirar da lista: os itens mudaram em memoria e nada
+		// mais vai ler esta sessao depois daqui.
+		h.saveItems(s)
 		h.removeFromEveryone(s)
 	}
 	if h.Chan != nil && s.ClientID != 0 {
@@ -337,3 +346,39 @@ func (h *Handler) log() *slog.Logger {
 	}
 	return slog.Default()
 }
+
+// saveItems grava equipamento e inventario do personagem em jogo.
+//
+// A origem gravava em TPlayer.SaveInGame, chamado de varios lugares, e a
+// gravacao de saida dependia de o caminho de desconexao chegar la: quando nao
+// chegava, tudo que o jogador tinha movido na sessao era perdido. Aqui a
+// gravacao fica no mesmo ponto unico de saida que tira o jogador do canal.
+func (h *Handler) saveItems(s *Session) {
+	if h.Items == nil || s.SelectedSlot < 0 || s.SelectedSlot >= store.MaxCharacterSlots {
+		return
+	}
+	charID := s.Characters[s.SelectedSlot].ID
+	if charID == 0 {
+		return
+	}
+	// A conexao ja esta morta aqui, entao o contexto e proprio e com prazo:
+	// sem isso uma gravacao presa seguraria a goroutine da conexao.
+	ctx, cancel := context.WithTimeout(context.Background(), saveTimeout)
+	defer cancel()
+
+	if len(s.Equip.Slots) > 0 {
+		if err := h.Items.SaveEquip(ctx, charID, s.Equip); err != nil {
+			h.log().Error("gravar equipamento",
+				"usuario", s.Username, "personagem", charID, "erro", err)
+		}
+	}
+	if len(s.Inventory.Slots) > 0 {
+		if err := h.Items.SaveInventory(ctx, charID, s.Inventory); err != nil {
+			h.log().Error("gravar inventario",
+				"usuario", s.Username, "personagem", charID, "erro", err)
+		}
+	}
+}
+
+// saveTimeout limita a gravacao de saida.
+const saveTimeout = 10 * time.Second

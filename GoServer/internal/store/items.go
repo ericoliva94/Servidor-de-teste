@@ -205,3 +205,75 @@ func clampToInt32(v int64) int32 {
 	}
 	return int32(v)
 }
+
+// SaveSet grava um conjunto de itens, substituindo o que estava la.
+//
+// Porte do bloco de gravacao de TPlayer.SaveInGame: a origem fazia
+// "DELETE FROM items WHERE owner_id=X AND slot_type=Y" e depois um INSERT com
+// todas as linhas, dentro de uma transacao. Mantida a mesma estrategia, que e
+// a que casa com o formato da tabela (sem chave unica por slot).
+//
+// Diferenca: a origem montava o SQL concatenando texto, inclusive o
+// Identific, que e Integer com sinal e vem de dados do jogador. Aqui os
+// valores vao como parametros.
+func (it Items) SaveSet(ctx context.Context, owner uint32, slotType int, set ItemSet) error {
+	if owner == 0 {
+		// Gravar com dono zero apagaria as linhas orfas de todo mundo.
+		return fmt.Errorf("store: gravar itens sem dono (tipo %d)", slotType)
+	}
+
+	tx, err := it.DB.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: abrir transacao de itens: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // o Commit abaixo e o caminho bom
+
+	const del = `DELETE FROM items WHERE owner_id = ? AND slot_type = ?`
+	if _, err := tx.ExecContext(ctx, del, owner, slotType); err != nil {
+		return fmt.Errorf("store: limpar itens (dono %d, tipo %d): %w",
+			owner, slotType, err)
+	}
+
+	const ins = `INSERT INTO items
+		(slot_type, owner_id, slot, item_id, app, identific,
+		 effect1_index, effect1_value, effect2_index, effect2_value,
+		 effect3_index, effect3_value, min, max, refine, time)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+
+	stmt, err := tx.PrepareContext(ctx, ins)
+	if err != nil {
+		return fmt.Errorf("store: preparar insercao de itens: %w", err)
+	}
+	defer stmt.Close()
+
+	for slot, item := range set.Slots {
+		if item.IsEmpty() {
+			continue
+		}
+		_, err := stmt.ExecContext(ctx,
+			slotType, owner, slot, item.Index, item.APP, item.Identific,
+			item.Effects.Index[0], item.Effects.Value[0],
+			item.Effects.Index[1], item.Effects.Value[1],
+			item.Effects.Index[2], item.Effects.Value[2],
+			item.Min, item.Max, item.Refi, item.Time)
+		if err != nil {
+			return fmt.Errorf("store: gravar item (dono %d, tipo %d, slot %d): %w",
+				owner, slotType, slot, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: confirmar itens (dono %d, tipo %d): %w",
+			owner, slotType, err)
+	}
+	return nil
+}
+
+// SaveEquip grava o equipamento de um personagem.
+func (it Items) SaveEquip(ctx context.Context, charID uint32, set ItemSet) error {
+	return it.SaveSet(ctx, charID, SlotTypeEquip, set)
+}
+
+// SaveInventory grava o inventario de um personagem.
+func (it Items) SaveInventory(ctx context.Context, charID uint32, set ItemSet) error {
+	return it.SaveSet(ctx, charID, SlotTypeInventory, set)
+}

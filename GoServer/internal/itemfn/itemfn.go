@@ -170,3 +170,152 @@ func EquippedHPMPInc(t Tabelas, equip []model.Item) int {
 	}
 	return total
 }
+
+// MaxSlotAmount e o MAX_SLOT_AMOUNT de GlobalDefs.pas: o maior empilhamento
+// num slot.
+const MaxSlotAmount = 1000
+
+// CanAgroup diz se o item empilha. Porte de ItemList[i].CanAgroup.
+//
+// Item que nao esta na tabela nao empilha. A origem lia
+// "ItemList[SrcItem.Index].CanAgroup" com Index ate 65535 num vetor menor.
+func CanAgroup(t Tabelas, index uint16) bool {
+	it := t.Item(int(index))
+	return it != nil && it.CanAgroup != 0
+}
+
+// Amount devolve a quantidade empilhada do item.
+//
+// A quantidade vive no campo Refi, o mesmo que guarda o refino nos
+// equipamentos: e empilhavel ou refinavel, nunca os dois.
+func Amount(it model.Item) uint16 { return it.Refi }
+
+// SetAmount grava a quantidade, se o item empilhar. Porte de SetItemAmount.
+func SetAmount(t Tabelas, it *model.Item, quant uint16) {
+	if it == nil || !CanAgroup(t, it.Index) {
+		return
+	}
+	it.Refi = quant
+}
+
+// AddAmount soma a quantidade, com teto. Porte de SetItemAmount(Somar=True).
+//
+// A origem fazia "Inc(item.Refi, quant)" num WORD, sem teto: somar acima de
+// 65535 dava a volta e a pilha virava um punhado de itens.
+func AddAmount(t Tabelas, it *model.Item, quant uint16) {
+	if it == nil || !CanAgroup(t, it.Index) {
+		return
+	}
+	soma := int(it.Refi) + int(quant)
+	if soma > MaxSlotAmount {
+		soma = MaxSlotAmount
+	}
+	it.Refi = uint16(soma)
+}
+
+// DecreaseAmount tira quant da pilha e esvazia o slot quando acaba. Porte de
+// TItemFunctions.DecreaseAmount.
+//
+// A origem testava "(item.Refi - Quanti) > 0" com os dois WORD: a subtracao
+// dava a volta e um item com 1 unidade do qual se tirassem 2 ficava com
+// 65535. Aqui a conta e com sinal.
+func DecreaseAmount(it *model.Item, quant uint16) {
+	if it == nil {
+		return
+	}
+	if int(it.Refi)-int(quant) > 0 {
+		it.Refi -= quant
+		return
+	}
+	*it = model.Item{}
+}
+
+// Agroup junta a pilha de src na de dest. Porte de TItemFunctions.AgroupItem.
+//
+// Devolve true quando as duas pilhas couberam numa so (dest esvaziado).
+//
+// Mantido da origem: a pilha junta fica em src, nao em dest, e quando a soma
+// passa de MAX_SLOT_AMOUNT com um dos lados ja cheio os dois itens sao
+// trocados de lugar em vez de somados.
+func Agroup(t Tabelas, src, dest *model.Item) bool {
+	if src == nil || dest == nil {
+		return false
+	}
+	if !CanAgroup(t, src.Index) {
+		return false
+	}
+	if int(src.Refi)+int(dest.Refi) > MaxSlotAmount {
+		if src.Refi == MaxSlotAmount || dest.Refi == MaxSlotAmount {
+			*src, *dest = *dest, *src
+			return true
+		}
+		resto := uint16(int(src.Refi) + int(dest.Refi) - MaxSlotAmount)
+		SetAmount(t, src, MaxSlotAmount)
+		SetAmount(t, dest, resto)
+		return false
+	}
+	src.Refi += dest.Refi
+	*dest = model.Item{}
+	return true
+}
+
+// ItemType devolve o ItemType do item, ou 0 quando o item nao existe.
+func ItemType(t Tabelas, index uint16) uint16 {
+	it := t.Item(int(index))
+	if it == nil {
+		return 0
+	}
+	return it.ItemType
+}
+
+// ItemLevel devolve o nivel exigido pelo item, ou 0.
+func ItemLevel(t Tabelas, index uint16) uint16 {
+	it := t.Item(int(index))
+	if it == nil {
+		return 0
+	}
+	return it.Level
+}
+
+// ItemClass devolve a classe exigida pelo item, ou 0.
+func ItemClass(t Tabelas, index uint16) uint16 {
+	it := t.Item(int(index))
+	if it == nil {
+		return 0
+	}
+	return it.Classe
+}
+
+// TypeTrade devolve a regra de troca do item, ou 0.
+func TypeTrade(t Tabelas, index uint16) uint8 {
+	it := t.Item(int(index))
+	if it == nil {
+		return 0
+	}
+	return it.TypeTrade
+}
+
+// Rank devolve o rank do item, ou 0.
+func Rank(t Tabelas, index uint16) uint8 {
+	it := t.Item(int(index))
+	if it == nil {
+		return 0
+	}
+	return it.Rank
+}
+
+// UseEffect devolve o efeito de uso do item, ou 0.
+func UseEffect(t Tabelas, index uint16) uint16 {
+	it := t.Item(int(index))
+	if it == nil {
+		return 0
+	}
+	return it.UseEffect
+}
+
+// Tipos de item que o movimento de inventario precisa distinguir.
+const (
+	ItemTypePet   = 8  // mascote
+	ItemTypeMount = 9  // montaria, pelo slot de equipamento
+	ItemTypePran  = 10 // pran
+)
