@@ -3,10 +3,13 @@ package game
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"testing"
 	"time"
+
+	"aika/internal/gamedata"
 
 	"aika/internal/model"
 	"aika/internal/netsrv"
@@ -642,5 +645,228 @@ func TestEntryPositionZeroCaiNoPadrao(t *testing.T) {
 func TestEntryPositionInvalidaCaiNoPadrao(t *testing.T) {
 	if p := entryPosition(store.Character{PosX: 999999, PosY: 10}); p != StartPosition {
 		t.Errorf("posicao = %v, queria %v", p, StartPosition)
+	}
+}
+
+// ---- equipamento
+
+// itensFalsos responde conjuntos montados a mao.
+type itensFalsos struct {
+	equip map[uint32]store.ItemSet
+	inv   map[uint32]store.ItemSet
+	erro  error
+}
+
+func (f itensFalsos) Equip(_ context.Context, id uint32) (store.ItemSet, error) {
+	if f.erro != nil {
+		return store.ItemSet{Slots: make([]model.Item, store.EquipSlots)}, f.erro
+	}
+	if s, ok := f.equip[id]; ok {
+		return s, nil
+	}
+	return store.ItemSet{Slots: make([]model.Item, store.EquipSlots)}, nil
+}
+
+func (f itensFalsos) Inventory(_ context.Context, id uint32) (store.ItemSet, error) {
+	if f.erro != nil {
+		return store.ItemSet{Slots: make([]model.Item, store.InventorySlots)}, f.erro
+	}
+	if s, ok := f.inv[id]; ok {
+		return s, nil
+	}
+	return store.ItemSet{Slots: make([]model.Item, store.InventorySlots)}, nil
+}
+
+func (f itensFalsos) Storage(_ context.Context, _ uint32) (store.ItemSet, error) {
+	return store.ItemSet{Slots: make([]model.Item, store.StorageSlots)}, nil
+}
+
+func (f itensFalsos) Cash(_ context.Context, _ uint32) (store.ItemSet, error) {
+	return store.ItemSet{Slots: make([]model.Item, store.CashSlots)}, nil
+}
+
+// conjuntoEquip monta um ItemSet de equipamento a partir de pares slot/indice.
+func conjuntoEquip(pares map[int]model.Item) store.ItemSet {
+	s := store.ItemSet{Slots: make([]model.Item, store.EquipSlots)}
+	for slot, it := range pares {
+		s.Slots[slot] = it
+	}
+	return s
+}
+
+// O equipamento carregado chega ao pacote de spawn.
+func TestEquipamentoChegaAoSpawn(t *testing.T) {
+	h := testHandler()
+	s := sessaoEmJogo(0, 0)
+	set := conjuntoEquip(map[int]model.Item{
+		0: {Index: 1001},
+		1: {Index: 1002},
+		3: {Index: 1003, APP: 2003},
+		6: {Index: 1006, Refi: 48}, // 48/16 = 3
+	})
+	s.Avatar.SetEquip(set)
+
+	pkt := h.buildCreateMob(s, SpawnNormal)
+	if pkt.Equip[0] != 1001 || pkt.Equip[1] != 1002 {
+		t.Errorf("slots 0 e 1 = %d/%d", pkt.Equip[0], pkt.Equip[1])
+	}
+	// Slot 3 tem aparencia: ela e que vai.
+	if pkt.Equip[3] != 2003 {
+		t.Errorf("slot 3 = %d, queria a aparencia 2003", pkt.Equip[3])
+	}
+	// O refino do slot 6 vai em ItemEff[7] como divisao inteira por 16.
+	if pkt.ItemEff[7] != 3 {
+		t.Errorf("ItemEff[7] = %d, queria 3", pkt.ItemEff[7])
+	}
+}
+
+// Entrar no mundo carrega os itens e os poe no $925.
+func TestEntradaNoMundoCarregaItens(t *testing.T) {
+	num := novoNumerics()
+	h := handlerComNumerics(num)
+	h.Chan = NewChannel(0, 10)
+	personagem := personagens()[7][0]
+	h.Items = itensFalsos{
+		equip: map[uint32]store.ItemSet{
+			personagem.ID: conjuntoEquip(map[int]model.Item{
+				2: {Index: 555, Min: 10, Max: 20},
+			}),
+		},
+		inv: map[uint32]store.ItemSet{
+			personagem.ID: func() store.ItemSet {
+				s := store.ItemSet{Slots: make([]model.Item, store.InventorySlots)}
+				s.Slots[5] = model.Item{Index: 777}
+				return s
+			}(),
+		},
+	}
+
+	s := sessaoAutenticada()
+	e := novoEspiao(t)
+	h.Chan.Join(e.conn, s)
+
+	if err := h.sendToWorld(context.Background(), e.conn, s, 0); err != nil {
+		t.Fatal(err)
+	}
+	if s.Equip.Get(2).Index != 555 {
+		t.Errorf("equipamento na sessao = %d", s.Equip.Get(2).Index)
+	}
+	if s.Inventory.Get(5).Index != 777 {
+		t.Errorf("inventario na sessao = %d", s.Inventory.Get(5).Index)
+	}
+	if s.Avatar.Equip[2] != 555 {
+		t.Errorf("avatar nao recebeu o equipamento: %d", s.Avatar.Equip[2])
+	}
+
+	// O $131 vem antes do $925.
+	if got := e.espera(t); got != CodeP131 {
+		t.Fatalf("primeiro pacote %#x, queria %#x", got, CodeP131)
+	}
+	mundo := e.proximo(t)
+	if mundo.code != CodeSendToWorld {
+		t.Fatalf("segundo pacote %#x, queria %#x", mundo.code, CodeSendToWorld)
+	}
+
+	var pkt packets.SendToWorldPacket
+	if err := netsrv.Unmarshal(asPacote(t, mundo.corpo), &pkt); err != nil {
+		t.Fatal(err)
+	}
+	if pkt.Character.Equip[2].Index != 555 {
+		t.Errorf("equipamento no $925 = %d", pkt.Character.Equip[2].Index)
+	}
+	if pkt.Character.Inventory[5].Index != 777 {
+		t.Errorf("inventario no $925 = %d", pkt.Character.Inventory[5].Index)
+	}
+}
+
+// Falha ao ler itens nao impede a entrada: o jogador entra sem o que nao pudo
+// ser lido, e nao fica preso na tela de selecao.
+func TestFalhaAoLerItensNaoImpedeAEntrada(t *testing.T) {
+	num := novoNumerics()
+	h := handlerComNumerics(num)
+	h.Chan = NewChannel(0, 10)
+	h.Items = itensFalsos{erro: errItensQuebrados}
+
+	s := sessaoAutenticada()
+	e := novoEspiao(t)
+	h.Chan.Join(e.conn, s)
+
+	if err := h.sendToWorld(context.Background(), e.conn, s, 0); err != nil {
+		t.Fatalf("entrada deveria ter seguido: %v", err)
+	}
+	if s.Status != Playing {
+		t.Errorf("estado = %v, queria Playing", s.Status)
+	}
+}
+
+var errItensQuebrados = errors.New("falha de teste ao ler itens")
+
+// asPacote reenquadra bytes ja decifrados para o Unmarshal poder ler.
+func asPacote(t *testing.T, corpo []byte) protocol.Packet {
+	t.Helper()
+	return protocol.Packet{
+		Size: len(corpo),
+		Code: binary.LittleEndian.Uint16(corpo[6:]),
+		Data: corpo,
+	}
+}
+
+// O bonus de refino do equipamento entra no HP e no MP maximos.
+func TestBonusDeRefinoEntraNoMaximo(t *testing.T) {
+	var a Avatar
+	a.ClassInfo = 1
+	a.Level = 10
+	a.Cons = 20
+	a.Luck = 20
+	a.RecalcMax()
+	semBonus := a.MaxHP
+	semBonusMP := a.MaxMP
+
+	a.EquipHPMPBonus = 500
+	a.RecalcMax()
+	if a.MaxHP != semBonus+500 {
+		t.Errorf("MaxHP = %d, queria %d", a.MaxHP, semBonus+500)
+	}
+	if a.MaxMP != semBonusMP+500 {
+		t.Errorf("MaxMP = %d, queria %d", a.MaxMP, semBonusMP+500)
+	}
+}
+
+// Perder o bonus reduz o maximo, e o atual nao pode ficar acima dele.
+func TestPerderBonusNaoDeixaHPAcimaDoMaximo(t *testing.T) {
+	var a Avatar
+	a.ClassInfo = 1
+	a.Level = 1
+	a.EquipHPMPBonus = 10000
+	a.RecalcMax()
+	a.CurHP = a.MaxHP
+	a.CurMP = a.MaxMP
+
+	a.ApplyEquipBonus(tabelaVazia{}, store.ItemSet{
+		Slots: make([]model.Item, store.EquipSlots)})
+	if a.CurHP > a.MaxHP {
+		t.Errorf("CurHP %d acima do MaxHP %d", a.CurHP, a.MaxHP)
+	}
+	if a.CurMP > a.MaxMP {
+		t.Errorf("CurMP %d acima do MaxMP %d", a.CurMP, a.MaxMP)
+	}
+}
+
+// tabelaVazia responde que nada existe.
+type tabelaVazia struct{}
+
+func (tabelaVazia) Item(int) *gamedata.ItemFromList { return nil }
+
+func (tabelaVazia) Reinforce3At(int) *gamedata.ArmorAttributeReinforce { return nil }
+
+// Sem tabela carregada o bonus fica como estava, sem quebrar.
+func TestApplyEquipBonusSemTabela(t *testing.T) {
+	var a Avatar
+	a.ClassInfo = 1
+	a.Level = 1
+	a.EquipHPMPBonus = 7
+	a.ApplyEquipBonus(nil, store.ItemSet{})
+	if a.EquipHPMPBonus != 7 {
+		t.Errorf("bonus = %d, queria 7", a.EquipHPMPBonus)
 	}
 }

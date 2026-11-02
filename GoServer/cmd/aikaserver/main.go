@@ -22,6 +22,7 @@ import (
 	"aika/internal/config"
 	"aika/internal/game"
 	"aika/internal/gamedata"
+	"aika/internal/model"
 	"aika/internal/netsrv"
 	"aika/internal/store"
 	"aika/internal/tokensrv"
@@ -75,6 +76,7 @@ func run() error {
 	var (
 		accounts auth.Accounts
 		chars    game.Characters
+		items    game.ItemSource
 		numerics game.NumericStore
 		tokens   tokensrv.Store
 	)
@@ -83,6 +85,7 @@ func run() error {
 		accounts = noAccounts{}
 		chars = noChars{}
 		numerics = noChars{}
+		items = noItems{}
 	} else {
 		db, err := store.Open(ctx, store.Config{
 			Server:   cfg.MySQLServer,
@@ -104,6 +107,7 @@ func run() error {
 		cs := store.Characters{DB: db}
 		chars = cs
 		numerics = cs
+		items = store.Items{DB: db}
 	}
 
 	loginSrv := netsrv.New(netsrv.Config{
@@ -127,8 +131,10 @@ func run() error {
 		Chan:           canal,
 		Accounts:       accounts,
 		Chars:          chars,
+		Items:          items,
 		Numerics:       numerics,
 		Durations:      tables,
+		Data:           tables,
 		WatchDistance:  cfg.DistanceToWatch,
 		ForgetDistance: cfg.DistanceToForget,
 		Log:            log,
@@ -224,6 +230,25 @@ func (noChars) ByAccount(context.Context, uint32) ([store.MaxCharacterSlots]stor
 func (noChars) SaveNumeric(context.Context, uint32, string) error { return nil }
 
 func (noChars) SaveNumericErrors(context.Context, uint32, int) error { return nil }
+
+// noItems devolve conjuntos vazios. Usado com -no-db.
+type noItems struct{}
+
+func (noItems) Equip(context.Context, uint32) (store.ItemSet, error) {
+	return store.ItemSet{Slots: make([]model.Item, store.EquipSlots)}, nil
+}
+
+func (noItems) Inventory(context.Context, uint32) (store.ItemSet, error) {
+	return store.ItemSet{Slots: make([]model.Item, store.InventorySlots)}, nil
+}
+
+func (noItems) Storage(context.Context, uint32) (store.ItemSet, error) {
+	return store.ItemSet{Slots: make([]model.Item, store.StorageSlots)}, nil
+}
+
+func (noItems) Cash(context.Context, uint32) (store.ItemSet, error) {
+	return store.ItemSet{Slots: make([]model.Item, store.CashSlots)}, nil
+}
 
 // noAccounts recusa todo login. Usado com -no-db.
 type noAccounts struct{}

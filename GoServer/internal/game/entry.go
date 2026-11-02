@@ -189,6 +189,16 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 		return err
 	}
 
+	// Os itens entram antes de montar o pacote: o cliente desenha o boneco a
+	// partir do que vem no $925, e sem equipamento ele aparece nu.
+	//
+	// Na origem o carregamento de equipamento usava o indice do laco como
+	// slot do personagem ("Slot := i" dentro de "for i := 0 to CharCount-1"),
+	// e nao o slot que veio do banco: uma conta com personagens nos slots 0 e
+	// 2 lia os itens de Characters[1], que esta vazio, e o personagem do slot
+	// 2 entrava sem equipamento.
+	equip, inventario := h.loadItems(ctx, s, src.ID)
+
 	var pkt packets.SendToWorldPacket
 	pkt.Header.Index = WorldIndex
 	pkt.AcountSerial = s.Account.ID
@@ -219,8 +229,19 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	}
 	netsrv.PutCString(ch.Numeric[:], src.NumericToken)
 
+	for i := range ch.Equip {
+		ch.Equip[i] = equip.Get(i)
+	}
+	for i := range ch.Inventory {
+		ch.Inventory[i] = inventario.Get(i)
+	}
+
 	s.SelectedSlot = slot
+	s.Equip = equip
+	s.Inventory = inventario
 	s.Avatar = AvatarFromCharacter(src, uint16(s.Account.Nation))
+	s.Avatar.SetEquip(equip)
+	s.Avatar.ApplyEquipBonus(h.Data, equip)
 	s.SpeedMove = s.Avatar.SpeedMove
 	s.Position = entryPosition(src)
 	s.AnchorPosition = s.Position
@@ -285,4 +306,34 @@ var StartPosition = model.Position{X: 2100, Y: 2100}
 // numericField le a numerica de um campo de tamanho fixo.
 func numericField(b []byte) string {
 	return strings.TrimSpace(netsrv.CString(b))
+}
+
+// loadItems le equipamento e inventario do personagem.
+//
+// Falha de leitura nao impede a entrada: o jogador entra sem o que nao pudo
+// ser lido e o erro vai para o log. A origem fazia o mesmo por acidente — o
+// try/except em volta de cada consulta engolia a excecao e seguia — mas sem
+// registrar qual personagem ficou sem item.
+func (h *Handler) loadItems(ctx context.Context, s *Session, charID uint32) (equip, inv store.ItemSet) {
+	equip = store.ItemSet{Slots: make([]model.Item, store.EquipSlots)}
+	inv = store.ItemSet{Slots: make([]model.Item, store.InventorySlots)}
+	if h.Items == nil {
+		return equip, inv
+	}
+	if e, err := h.Items.Equip(ctx, charID); err != nil {
+		h.log().Error("carregar equipamento",
+			"personagem", charID, "usuario", s.Username, "erro", err)
+	} else {
+		equip = e
+	}
+	if i, err := h.Items.Inventory(ctx, charID); err != nil {
+		h.log().Error("carregar inventario",
+			"personagem", charID, "usuario", s.Username, "erro", err)
+	} else {
+		inv = i
+	}
+	for _, a := range append(equip.Avisos, inv.Avisos...) {
+		h.log().Warn("itens", "personagem", charID, "aviso", a)
+	}
+	return equip, inv
 }

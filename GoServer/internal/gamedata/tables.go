@@ -171,3 +171,14 @@ func (t *Tables) BuffSeconds(i uint16) int {
 
 // maxBuffSeconds limita a duracao lida do arquivo a 24 horas.
 const maxBuffSeconds = 24 * 60 * 60
+
+// Reinforce3At devolve a linha i de Reinforce3, ou nil fora da faixa.
+//
+// A origem indexava "Reinforce3[GetItemReinforce3Index(Index)]" sem checagem,
+// e o indice calculado podia passar do fim da tabela.
+func (t *Tables) Reinforce3At(i int) *ArmorAttributeReinforce {
+	if t == nil || i < 0 || i >= len(t.Reinforce3) {
+		return nil
+	}
+	return &t.Reinforce3[i]
+}

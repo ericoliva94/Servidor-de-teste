@@ -11,6 +11,7 @@ import (
 
 	"aika/internal/auth"
 	"aika/internal/entity"
+	"aika/internal/itemfn"
 	"aika/internal/model"
 	"aika/internal/netsrv"
 	"aika/internal/packets"
@@ -40,11 +41,20 @@ type Characters interface {
 	ByAccount(ctx context.Context, accountID uint32) ([store.MaxCharacterSlots]store.Character, []string, error)
 }
 
+// ItemSource busca os itens de um personagem e de uma conta.
+type ItemSource interface {
+	Equip(ctx context.Context, charID uint32) (store.ItemSet, error)
+	Inventory(ctx context.Context, charID uint32) (store.ItemSet, error)
+	Storage(ctx context.Context, accountID uint32) (store.ItemSet, error)
+	Cash(ctx context.Context, accountID uint32) (store.ItemSet, error)
+}
+
 // Handler atende os pacotes do canal.
 type Handler struct {
 	Channel  uint8
 	Accounts auth.Accounts
 	Chars    Characters
+	Items    ItemSource
 	Numerics NumericStore
 	// Chan e o registro de quem esta conectado a este canal.
 	Chan *Channel
@@ -54,8 +64,11 @@ type Handler struct {
 	ForgetDistance uint16
 	// Durations da a duracao dos buffs (SkillData); nil trata tudo como 0.
 	Durations entity.Durations
-	Now       func() time.Time
-	Log       *slog.Logger
+	// Data sao as tabelas .bin que as contas de item precisam; nil zera os
+	// bonus em vez de quebrar.
+	Data itemfn.Tabelas
+	Now  func() time.Time
+	Log  *slog.Logger
 	// ServerVersion e o SERVER_VERSION do .ini, so para registro: o original
 	// aceita qualquer versao e apenas anota a diferenca.
 	ServerVersion uint16

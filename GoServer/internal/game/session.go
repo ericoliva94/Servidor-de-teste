@@ -78,6 +78,10 @@ type Session struct {
 	// veem. So tem conteudo a partir do Playing.
 	Avatar Avatar
 
+	// Equip e Inventory sao os itens do personagem em jogo.
+	Equip     store.ItemSet
+	Inventory store.ItemSet
+
 	// Base reune as listas de visiveis, buffs e recargas da entidade.
 	Base EntityState
 }

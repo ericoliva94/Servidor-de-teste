@@ -68,7 +68,8 @@ de evidências.
 | 10c | Token HTTP 8090 | `TokenSocket.pas`, `AuthHandlers.pas` | **pronto** |
 | 10d | Entrada no mundo: numérica (`$F02`) e `SendToWorld` (`$925`) | `PacketHandlers.pas`, `Player.pas` | **pronto** |
 | 10e | Registro do canal, movimento (`$301`), spawn (`$349`) e remoção (`$101`) | `ServerSocket.pas`, `BaseMob.pas`, `PacketHandlers.pas` | **pronto** |
-| 10f | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10f | Inventário e equipamento do banco, bônus de refino no HP/MP | `Player.pas`, `ItemFunctions.pas` | **pronto** |
+| 10g | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -322,6 +323,35 @@ nula, entrava em `0,0`: canto do mapa, fora de qualquer cidade. Agora posição
 gravada só vale se for utilizável, e o resto cai no ponto de partida. Mesma
 ideia para `speedmove` zerado, que deixava o boneco preso no lugar, e para
 `curhp` zerado, que fazia o personagem entrar morto e travado.
+
+**`store.Items`, slot do item** — o slot vinha do banco e indexava
+`Equip[ItemSlot]` e `Inventory[ItemSlot]` **sem nenhuma checagem de faixa**.
+Um slot errado escrevia no meio do registro do personagem, que é o que vai no
+`$925` e é gravado de volta. Agora slot fora da faixa é ignorado e reportado, e
+duas linhas no mesmo slot mantêm a primeira em vez de uma sumir em silêncio.
+
+**`Player.pas:1056`, equipamento no personagem errado** — o carregamento de
+equipamento usava o índice do laço como slot do personagem (`Slot := i` dentro
+de `for i := 0 to CharCount-1`), não o slot que veio do banco. Uma conta com
+personagens nos slots 0 e 2 lia os itens de `Characters[1]`, que está vazio, e
+o personagem do slot 2 entrava sem equipamento. No Go cada personagem é
+carregado pelo próprio id.
+
+**`itemfn.ReinforceHPMPInc`** — `GetItemReinforceHPMPInc` indexava
+`HealthIncrementPoints[Refine]`, um `ARRAY [0..15]`, com `Refine` vindo de
+`Round(Refi / 16)`, que chega a 4095 num `Refi` adulterado: leitura muito além
+do fim do vetor, dentro de outros registros da tabela. Agora nível fora de
+0..15 vale zero.
+
+**`itemfn.Reinforce3Index`** — com `UseEffect` acima de 105 a faixa ficava em
+zero e o resultado era o próprio `UseEffect`, que depois indexava `Reinforce3`
+sem checagem. Agora não há índice para esse caso e o bônus é zero.
+
+**`itemfn.ReinforceFromItem`, mantido de propósito** — `Round(item.Refi / 16)`
+é divisão em ponto flutuante com arredondamento bancário, **não** `div 16`. Com
+`Refi` 8 o refino é 0 e com 24 é 2. `Packet.ItemEff[7]`, no mesmo arquivo, usa
+`div 16`. Os dois valores diferem para metade dos refinos e os dois foram
+portados como estão, cada um no seu lugar.
 
 **`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da

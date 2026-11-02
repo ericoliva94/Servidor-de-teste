@@ -1,6 +1,7 @@
 package game
 
 import (
+	"aika/internal/itemfn"
 	"aika/internal/model"
 	"aika/internal/stats"
 	"aika/internal/store"
@@ -54,6 +55,10 @@ type Avatar struct {
 
 	TitleID    uint8
 	TitleLevel uint8
+
+	// EquipHPMPBonus e o GetEquipedItensHPMPInc da origem: o bonus de refino
+	// do equipamento vestido, que ali era somado tanto ao HP quanto ao MP.
+	EquipHPMPBonus int
 
 	// PlayerKill marca quem esta com o nome vermelho: a origem somava $80 ao
 	// SpawnType nesse caso.
@@ -117,6 +122,40 @@ func AvatarFromCharacter(src store.Character, nation uint16) Avatar {
 	return a
 }
 
+// SetEquip copia do conjunto de itens o que o pacote de spawn mostra.
+//
+// A origem lia Character^.Equip[i].Index e .APP direto do registro. O refino
+// do slot 6 ia para ItemEff[7] como "Refi div 16", porque o campo guarda o
+// nivel de refino nos 4 bits altos do byte baixo.
+func (a *Avatar) SetEquip(set store.ItemSet) {
+	for i := 0; i < EquipSlots; i++ {
+		it := set.Get(i)
+		a.Equip[i] = it.Index
+		a.EquipAPP[i] = it.APP
+	}
+	// ItemEff[7] recebia "Equip[6].Refi div 16": divisao inteira, nao o
+	// Round que GetReinforceFromItem usa. Os dois valores diferem para metade
+	// dos refinos, e e assim na origem.
+	a.RefineSlot6 = uint8(set.Get(6).Refi / 16 % 256)
+}
+
+// ApplyEquipBonus recalcula o bonus de refino do equipamento e os maximos.
+func (a *Avatar) ApplyEquipBonus(t itemfn.Tabelas, set store.ItemSet) {
+	if t == nil {
+		return
+	}
+	a.EquipHPMPBonus = itemfn.EquippedHPMPInc(t, set.Slots)
+	a.RecalcMax()
+	// O teto novo pode ser menor que o HP gravado: trocar de equipamento para
+	// um sem bonus reduz o maximo, e a origem deixava CurHP acima dele.
+	if a.CurHP > a.MaxHP {
+		a.CurHP = a.MaxHP
+	}
+	if a.CurMP > a.MaxMP {
+		a.CurMP = a.MaxMP
+	}
+}
+
 // RecalcMax refaz HP e MP maximos.
 func (a *Avatar) RecalcMax() {
 	in := stats.Input{
@@ -124,6 +163,8 @@ func (a *Avatar) RecalcMax() {
 		Level:     a.Level,
 		Cons:      a.Cons,
 		Luck:      a.Luck,
+		FlatHP:    a.EquipHPMPBonus,
+		FlatMP:    a.EquipHPMPBonus,
 	}
 	a.MaxHP = stats.MaxHP(in)
 	a.MaxMP = stats.MaxMP(in)
