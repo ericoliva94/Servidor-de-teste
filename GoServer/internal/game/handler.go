@@ -63,6 +63,8 @@ type Handler struct {
 	Chan *Channel
 	// Mobs e o mundo de mobs deste canal.
 	Mobs *MobWorld
+	// Parties guarda os grupos deste canal.
+	Parties *PartyRegistry
 	// Exp e a tabela de experiencia por nivel (ExpList).
 	Exp ExpTable
 	// ExpMultiplier e o EXP_MULTIPLIER do .ini; zero usa 1.
@@ -129,6 +131,18 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.attack(ctx, c, s, p)
 	case CodeRevive:
 		return h.revive(ctx, c, s, p)
+	case CodeSendParty:
+		return h.sendParty(ctx, c, s, p)
+	case CodeAcceptParty:
+		return h.acceptParty(ctx, c, s, p)
+	case CodeKickParty:
+		return h.kickParty(ctx, c, s, p)
+	case CodeDestroyParty:
+		return h.destroyParty(ctx, c, s, p)
+	case CodeGiveLeaderParty:
+		return h.giveLeaderParty(ctx, c, s, p)
+	case CodeAddSelfParty:
+		return h.addSelfParty(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta
@@ -250,6 +264,7 @@ func (h *Handler) OnDisconnect(c *netsrv.Conn) {
 		// Gravar antes de tirar da lista: os itens mudaram em memoria e nada
 		// mais vai ler esta sessao depois daqui.
 		h.saveItems(s)
+		h.leaveParty(s)
 		h.removeFromEveryone(s)
 	}
 	if h.Chan != nil && s.ClientID != 0 {

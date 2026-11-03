@@ -154,6 +154,7 @@ func run() error {
 		Log:            log,
 		ServerVersion:  uint16(cfg.Version),
 		Mobs:           mundoMobs,
+		Parties:        game.NewPartyRegistry(),
 		Exp:            tables,
 		ExpMultiplier:  cfg.ExpMultiplier,
 		MobEsquiva:     cfg.MobEsquiva,

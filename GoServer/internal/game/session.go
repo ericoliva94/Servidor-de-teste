@@ -87,6 +87,10 @@ type Session struct {
 	OpenedNPC    uint16
 	OpenedOption uint16
 
+	// PartyRequester e quem convidou este jogador para um grupo, zero quando
+	// nao ha convite pendente.
+	PartyRequester uint16
+
 	// Avatar e o personagem escolhido, do jeito que os outros clientes o
 	// veem. So tem conteudo a partir do Playing.
 	Avatar Avatar

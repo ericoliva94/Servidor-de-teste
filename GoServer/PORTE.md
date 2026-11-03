@@ -74,7 +74,8 @@ de evidências.
 | 10i | Atributos derivados (`GetCurrentScore`), ataque básico (`$302`), morte e revive (`$303`) | `BaseMob.pas`, `PacketHandlers.pas` | **pronto** (sem skill, dungeon, pran nem mascote) |
 | 10j | Mobs: carga dos dois CSV, spawn (`$35E`), visibilidade, golpe, morte, experiência (`$108`) e respawn | `ServerSocket.pas`, `MOB.pas`, `Player.pas` | **pronto** (sem IA de movimento nem ataque do mob) |
 | 10k | IA de mob: patrulha, perseguição e golpe no jogador | `MOB.pas` (`MobHandler`, `MobMoviment`, `AttackPlayer`) | **pronto** (sem skill de mob nem guarda) |
-| 10l | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10l | Grupo: convidar (`$322`), aceitar (`$323`), sair/expulsar (`$324`), desfazer (`$325`), liderança (`$34B`), pedir entrada (`$38F`), estado (`$326`), posição (`$11D`) e conversa de grupo | `PartyData.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (sem raid) |
+| 10m | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -572,6 +573,40 @@ os mesmos tempos, e só os mobs que algum jogador está vendo entram na varredur
 por `Players[mob.ClientID].SendClientMessage`, com `ClientID` de mob acima de
 1000 num vetor de 1000 posições. Mob não recebe mensagem, e agora isso é
 explícito.
+
+**`game.PartyRegistry`** — substitui o vetor `Parties: ARRAY [1..30]` **e** o
+ponteiro `Players[i].Party: PParty` que o original guardava dentro do registro
+do jogador. Aquele ponteiro apontava para dentro de um vetor global que
+`DestroyParty` zerava com `ZeroMemory`, e seguia sendo lido depois — inclusive
+em `RefreshParty`, que faz `Self.Party.Members` **sem checar nil**. Aqui o
+grupo é um objeto no registro e quem não tem grupo simplesmente não aparece no
+índice.
+
+**Convite reutilizável** — `AcceptParty` lia `Player.PartyRequester` e **não o
+limpava**: o mesmo `$323` entrava no grupo de novo, e nada impedia um cliente
+de repetir o pacote. Agora o convite vale uma vez.
+
+**`game.sendPartyUpdate`, estouro do vetor do pacote** — `RefreshParty`
+incrementava `J` dentro de `for i in Self.Party.Members` sem teto, e
+`Packet.Name[J]`, `Packet.PlayerIndex[J]` etc. têm 6 posições. Com mais membros
+que isso, escrevia fora do pacote. Agora o laço para no tamanho do vetor.
+
+**`game.leaveParty`** — a saída do grupo na desconexão dependia do caminho de
+desconexão chamar `RemoveMember`; quando não chamava, o grupo ficava com um
+membro que não estava mais no servidor, e `RefreshParty` seguia lendo
+`Players[i]` daquele slot — que podia já ter sido reaproveitado por outro
+jogador. Agora a saída fica no mesmo ponto único que tira o jogador do canal.
+
+**Limite de 30 grupos** — o laço de busca de `CreateParty` simplesmente não
+achava slot livre e devolvia `False` **sem avisar ninguém**: o jogador clicava
+e nada acontecia. Agora o limite é explícito e o pedido é recusado com
+mensagem.
+
+**Nível no pacote de grupo** — `Packet.Level[J] := Level - 1` num `BYTE`: nível
+0 ia como 255. Piso em zero.
+
+**Conversa de grupo** — passou de "não disponível" para funcionando; guilda,
+aliança, nação e megafone seguem recusados com aviso.
 
 **`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da
