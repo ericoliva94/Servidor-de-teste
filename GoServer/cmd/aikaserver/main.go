@@ -78,14 +78,15 @@ func run() error {
 	defer stop()
 
 	var (
-		accounts auth.Accounts
-		chars    game.Characters
-		items    game.ItemSource
-		skillDB  game.SkillStore
-		guildDB  game.GuildStore
-		mailDB   game.MailStore
-		numerics game.NumericStore
-		tokens   tokensrv.Store
+		accounts  auth.Accounts
+		chars     game.Characters
+		items     game.ItemSource
+		skillDB   game.SkillStore
+		guildDB   game.GuildStore
+		mailDB    game.MailStore
+		auctionDB game.AuctionStore
+		numerics  game.NumericStore
+		tokens    tokensrv.Store
 	)
 	if *skipDB {
 		log.Warn("subindo sem banco: nenhum login sera aceito")
@@ -95,7 +96,8 @@ func run() error {
 		items = noItems{}
 		skillDB = noSkills{}
 		guildDB = noGuilds{}
-		mailDB = nil // sem banco nao ha correio
+		mailDB = nil    // sem banco nao ha correio
+		auctionDB = nil // nem leilao
 	} else {
 		db, err := store.Open(ctx, store.Config{
 			Server:   cfg.MySQLServer,
@@ -121,6 +123,7 @@ func run() error {
 		skillDB = store.Skills{DB: db}
 		guildDB = store.Guilds{DB: db}
 		mailDB = store.Mails{DB: db}
+		auctionDB = store.Auctions{DB: db}
 	}
 
 	loginSrv := netsrv.New(netsrv.Config{
@@ -179,6 +182,7 @@ func run() error {
 		SkillDB:        skillDB,
 		GuildDB:        guildDB,
 		MailDB:         mailDB,
+		AuctionDB:      auctionDB,
 		Guilds:         registroGuildas,
 		SkillTable:     tables,
 		Numerics:       numerics,
@@ -267,6 +271,7 @@ func run() error {
 	go respawnLoop(ctx, canalHandler, log)
 	go mobAILoop(ctx, canalHandler, log)
 	go mapObjectLoop(ctx, canalHandler, log)
+	go auctionLoop(ctx, canalHandler, log)
 
 	tarefas := 2
 	errc := make(chan error, 3)
@@ -357,6 +362,29 @@ func mapObjectLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
 		case <-t.C:
 			if n := h.MapObjectTick(); n > 0 {
 				log.Debug("itens do chao expirados", "quantidade", n)
+			}
+		}
+	}
+}
+
+// auctionInterval e o passo com que o servidor confere as ofertas vencidas.
+const auctionInterval = time.Minute
+
+// auctionLoop devolve ao vendedor os itens das ofertas que venceram.
+//
+// A origem tinha TAuctionFunctions.CheckAuctionItems, cujo corpo e so
+// "Result := True": a oferta vencida ficava no banco para sempre e o item
+// nunca voltava ao vendedor.
+func auctionLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
+	t := time.NewTicker(auctionInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if n := h.AuctionExpireTick(ctx); n > 0 {
+				log.Info("ofertas vencidas devolvidas", "quantidade", n)
 			}
 		}
 	}

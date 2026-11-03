@@ -72,6 +72,20 @@ func (f *correioFalso) Add(_ context.Context, nome string, m mail.Mail) error {
 	return b.Add(m)
 }
 
+func (f *correioFalso) AddTo(_ context.Context, charID uint32, m mail.Mail) error {
+	if f.erroAdd != nil {
+		return f.erroAdd
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	b, ok := f.caixas[charID]
+	if !ok {
+		b = &mail.Box{}
+		f.caixas[charID] = b
+	}
+	return b.Add(m)
+}
+
 func (f *correioFalso) Save(_ context.Context, charID uint32, m mail.Mail) error {
 	if f.erroSave != nil {
 		return f.erroSave

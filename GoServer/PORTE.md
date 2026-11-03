@@ -79,7 +79,8 @@ de evidências.
 | 10n | Drop: carga das 13 listas, sorteio, item no chão (`$33B`), coleta (`$336`) e expiração | `Load.pas`, `BaseMob.pas` (`DropItemFor`), `ServerSocket.pas` (`CreateMapObject`) | **pronto** |
 | 10o | Guilda: criar (`$341`), convite (`$F7B`/`$67D`/`$F7E`), expulsar (`$F2D`), sair (`$F1C`), rank (`$F1D`), mestre (`$619`), avisos (`$F20`), site (`$F21`), permissões (`$F22`), info (`$965`), membros (`$97F`) e conversa de guilda | `GuildData.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (sem baú, aliança, skill de guilda nem cerco) |
 | 10p | Correio: conferir (`$3F16`), enviar (`$3F15`), lista (`$3F17`), abrir/apagar (`$3F18`), retirar anexo (`$3F1A`), não lidas (`$3F1B`) | `MailFunctions.pas`, `CharacterMail.pas` | **pronto** (caixa no MySQL; ver abaixo) |
-| 10q | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10q | Leilão: registrar (`$3F0B`), comprar (`$3F0C`), lista (`$3F0D`), cancelar (`$3F10`), minhas ofertas (`$3F11`) e vencimento | `AuctionFunctions.pas`, `PacketHandlers.pas` | **pronto** (ofertas no MySQL; entrega pelo correio) |
+| 10r | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -789,3 +790,59 @@ Agora é recusado com mensagem.
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da
 faixa lia memória fora da tabela. Agora índice inválido responde 0, e a duração
 lida do arquivo é limitada a 24 h para um valor absurdo não virar buff eterno.
+
+### Leilão (`AuctionFunctions.pas`)
+
+**`RequestBuyItem` entregava o item antes de conferir o ouro do comprador.**
+A ordem na origem é: monta a carta do item para o comprador, monta a carta do
+ouro para o vendedor, insere o anexo com `RegisterItemDatabase`, e **só então**
+lê `SellingPrice` e sai com `Exit` se o comprador não tiver ouro. Quem mandasse
+o pacote de compra sem dinheiro levava o item de graça, e a carta do ouro já
+estava na caixa do vendedor. No porte a conferência (`auction.CanBuy`) vem
+antes de qualquer gravação, e o fechamento da oferta vem antes das cartas.
+
+**`RequestCancelOffer` não conferia o dono.** A oferta era buscada pelo índice
+que vinha no pacote e cancelada sem comparar o vendedor com quem pediu:
+qualquer jogador cancelava a oferta de qualquer outro, e o item ia para a caixa
+de quem cancelou. Agora `auction.CanCancel` exige que o `CharIndex` do pedido
+seja o do vendedor.
+
+**Dois compradores levavam o mesmo item.** Com uma thread por jogador, duas
+compras simultâneas da mesma oferta liam `Active = 1` e seguiam as duas. O
+fechamento agora é um `UPDATE auction_offers SET active = 0 WHERE offer_index =
+? AND active = 1`: `RowsAffected > 0` elege um único vencedor, e o outro recebe
+recusa sem perder ouro.
+
+**`CheckAuctionItems` tinha o corpo esvaziado** (só `Result := True`): a oferta
+vencida ficava marcada como ativa para sempre e o item **nunca** voltava ao
+vendedor. O porte roda `AuctionExpireTick` num ticker de 1 minuto, que fecha a
+oferta vencida e devolve o item por carta.
+
+**`SELECT max(id)` fora da transação** em `RegisterItemDatabase`: dois
+registros ao mesmo tempo liam o mesmo id e o segundo sobrescrevia o anexo do
+primeiro. O índice da oferta agora vem de um contador no banco.
+
+**`Inventory[Slot]` com `Slot` vindo do cliente.** `RequestRegisterItem` lê o
+slot como `WORD` e indexa `Inventory: ARRAY [0..63]` sem checar; o
+`ZeroMemory(@Inventory[Slot], SizeOf(TItem))` do fim **escreve** 20 bytes fora
+do vetor para qualquer slot acima de 63 — corrompendo o que estiver depois do
+inventário no registro do jogador. Agora o slot é conferido contra
+`MovableInventorySlots`.
+
+**Mais de 12 ofertas próprias recusava a lista inteira.** `SendCadastredItems`
+sai sem enviar nada quando a contagem passa de 12, então o jogador com 13
+ofertas não via **nenhuma**. Agora a lista é cortada no teto e as 12 primeiras
+aparecem.
+
+**Falha ao registrar tirava o item do inventário.** Mesmo padrão do correio: a
+oferta é gravada primeiro, e o item só sai do inventário (e a taxa só é
+cobrada) depois da gravação dar certo.
+
+**Taxa de registro: a conta da origem foi mantida.** `Trunc(Price / 1000) *
+Round(Hours / 3)` — com o `Round` do Delphi (metade para o par), preço abaixo
+de 1000 dá taxa **zero**, e 3 h de prazo também. Isso está no original e
+continua assim; o teste `TestComissao` registra a tabela de valores.
+
+**Item com `TypeTrade` de não comercializável** era aceito no leilão: a origem
+confere o `TypeTrade` na troca entre jogadores, mas não no registro da oferta.
+Agora é recusado.

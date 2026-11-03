@@ -125,6 +125,14 @@ func (m Mails) Add(ctx context.Context, nome string, carta mail.Mail) error {
 	return m.insert(ctx, dono, carta)
 }
 
+// AddTo poe uma carta na caixa de um personagem pelo id.
+func (m Mails) AddTo(ctx context.Context, charID uint32, carta mail.Mail) error {
+	if charID == 0 {
+		return mail.ErrInvalidTarget
+	}
+	return m.insert(ctx, charID, carta)
+}
+
 // Save grava uma carta que mudou.
 func (m Mails) Save(ctx context.Context, charID uint32, carta mail.Mail) error {
 	if charID == 0 || carta.Index == 0 {

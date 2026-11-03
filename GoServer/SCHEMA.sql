@@ -98,3 +98,31 @@ CREATE TABLE IF NOT EXISTS skills (
   level        INT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (owner_charid, type, slot)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Leilao. A origem guardava as ofertas na tabela `auction` com o item em
+-- colunas soltas e consultava com "SELECT max(id)" fora da transacao de
+-- insercao. Aqui o indice da oferta vem de um contador no proprio banco e o
+-- fechamento e condicional (UPDATE ... WHERE active = 1), para que dois
+-- compradores simultaneos nao levem o mesmo item.
+CREATE TABLE IF NOT EXISTS auction_offers (
+  offer_index       BIGINT UNSIGNED NOT NULL,
+  seller_char_index INT UNSIGNED NOT NULL,
+  seller_name       VARCHAR(20) NOT NULL DEFAULT '',
+  price             INT UNSIGNED NOT NULL DEFAULT 0,
+  hours             SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  listed_at         DATETIME NOT NULL,
+  active            TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  sold_to           INT UNSIGNED NOT NULL DEFAULT 0,
+
+  item_id        INT UNSIGNED NOT NULL DEFAULT 0,
+  item_app       INT UNSIGNED NOT NULL DEFAULT 0,
+  item_identific INT NOT NULL DEFAULT 0,
+  item_min       INT UNSIGNED NOT NULL DEFAULT 0,
+  item_max       INT UNSIGNED NOT NULL DEFAULT 0,
+  item_refine    INT UNSIGNED NOT NULL DEFAULT 0,
+  item_time      INT UNSIGNED NOT NULL DEFAULT 0,
+
+  PRIMARY KEY (offer_index),
+  KEY idx_active (active, listed_at),
+  KEY idx_seller (seller_char_index, active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

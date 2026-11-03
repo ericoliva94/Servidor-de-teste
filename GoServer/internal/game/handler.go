@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"aika/internal/auction"
 	"aika/internal/auth"
 	"aika/internal/combat"
 	"aika/internal/dropdata"
@@ -65,6 +66,8 @@ type MailStore interface {
 	Box(ctx context.Context, charID uint32) (*mail.Box, error)
 	// Add poe uma carta na caixa de um personagem, achado pelo nome.
 	Add(ctx context.Context, nome string, m mail.Mail) error
+	// AddTo poe uma carta na caixa de um personagem pelo id.
+	AddTo(ctx context.Context, charID uint32, m mail.Mail) error
 	// Save grava uma carta que mudou.
 	Save(ctx context.Context, charID uint32, m mail.Mail) error
 	// Remove apaga uma carta.
@@ -75,6 +78,25 @@ type MailStore interface {
 	NextIndex(ctx context.Context) (uint64, error)
 	// CharacterExists diz se o personagem existe.
 	CharacterExists(ctx context.Context, nome string) (bool, error)
+}
+
+// AuctionStore guarda as ofertas do leilao.
+type AuctionStore interface {
+	// NextIndex devolve o proximo indice de oferta.
+	NextIndex(ctx context.Context) (uint64, error)
+	// Register grava uma oferta nova.
+	Register(ctx context.Context, o auction.Offer) error
+	// Get busca uma oferta pelo indice.
+	Get(ctx context.Context, index uint64) (*auction.Offer, error)
+	// Active lista as ofertas valendo.
+	Active(ctx context.Context, limite int) ([]auction.Offer, error)
+	// ByOwner lista as ofertas de um personagem.
+	ByOwner(ctx context.Context, charIndex uint32, limite int) ([]auction.Offer, error)
+	// Close fecha a oferta e diz se ela estava aberta. Fechar e o que impede
+	// dois compradores de levar o mesmo item.
+	Close(ctx context.Context, index uint64, compradorCharIndex uint32) (bool, error)
+	// Expired lista as ofertas que passaram do prazo.
+	Expired(ctx context.Context, agora time.Time) ([]auction.Offer, error)
 }
 
 // ItemSource busca e grava os itens de um personagem e de uma conta.
@@ -89,14 +111,15 @@ type ItemSource interface {
 
 // Handler atende os pacotes do canal.
 type Handler struct {
-	Channel  uint8
-	Accounts auth.Accounts
-	Chars    Characters
-	Items    ItemSource
-	SkillDB  SkillStore
-	GuildDB  GuildStore
-	MailDB   MailStore
-	Numerics NumericStore
+	Channel   uint8
+	Accounts  auth.Accounts
+	Chars     Characters
+	Items     ItemSource
+	SkillDB   SkillStore
+	GuildDB   GuildStore
+	MailDB    MailStore
+	AuctionDB AuctionStore
+	Numerics  NumericStore
 	// Chan e o registro de quem esta conectado a este canal.
 	Chan *Channel
 	// Mobs e o mundo de mobs deste canal.
@@ -237,6 +260,16 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.openMail(ctx, c, s, p)
 	case CodeMailWithdraw:
 		return h.withdrawMail(ctx, c, s, p)
+	case CodeAuctionRegister:
+		return h.registerAuctionItem(ctx, c, s, p)
+	case CodeAuctionList:
+		return h.listAuctionItems(ctx, c, s, p)
+	case CodeAuctionOwn:
+		return h.ownAuctionItems(ctx, c, s, p)
+	case CodeAuctionBuy:
+		return h.buyAuctionItem(ctx, c, s, p)
+	case CodeAuctionCancel:
+		return h.cancelAuctionOffer(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta
