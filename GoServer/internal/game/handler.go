@@ -13,6 +13,7 @@ import (
 	"aika/internal/combat"
 	"aika/internal/dropdata"
 	"aika/internal/entity"
+	"aika/internal/guild"
 	"aika/internal/itemfn"
 	"aika/internal/model"
 	"aika/internal/netsrv"
@@ -50,6 +51,13 @@ type SkillStore interface {
 	Save(ctx context.Context, charID uint32, list model.SkillsList) error
 }
 
+// GuildStore le e grava as guildas.
+type GuildStore interface {
+	All(ctx context.Context) ([]*guild.Guild, []string, error)
+	Save(ctx context.Context, g *guild.Guild) error
+	Delete(ctx context.Context, index uint16) error
+}
+
 // ItemSource busca e grava os itens de um personagem e de uma conta.
 type ItemSource interface {
 	Equip(ctx context.Context, charID uint32) (store.ItemSet, error)
@@ -67,6 +75,7 @@ type Handler struct {
 	Chars    Characters
 	Items    ItemSource
 	SkillDB  SkillStore
+	GuildDB  GuildStore
 	Numerics NumericStore
 	// Chan e o registro de quem esta conectado a este canal.
 	Chan *Channel
@@ -74,6 +83,10 @@ type Handler struct {
 	Mobs *MobWorld
 	// Parties guarda os grupos deste canal.
 	Parties *PartyRegistry
+	// Guilds guarda as guildas.
+	Guilds *guild.Registry
+	// GuildCost e o custo em ouro de criar guilda; zero usa o padrao.
+	GuildCost int64
 	// Drops e a tabela de listas de drop.
 	Drops *dropdata.Table
 	// MapObjs guarda os objetos no chao.
@@ -174,6 +187,28 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.collectMapItem(ctx, c, s, p)
 	case CodeCancelCollect:
 		return h.cancelCollect(ctx, c, s, p)
+	case CodeCreateGuild:
+		return h.createGuild(ctx, c, s, p)
+	case CodeInviteGuild:
+		return h.inviteGuild(ctx, c, s, p)
+	case CodeInviteGuildAccept:
+		return h.acceptGuild(ctx, c, s, p)
+	case CodeInviteGuildDeny:
+		return h.denyGuild(ctx, c, s, p)
+	case CodeKickGuild:
+		return h.kickGuild(ctx, c, s, p)
+	case CodeExitGuild:
+		return h.exitGuild(ctx, c, s, p)
+	case CodeGuildRank:
+		return h.guildRank(ctx, c, s, p)
+	case CodeGuildMaster:
+		return h.guildMaster(ctx, c, s, p)
+	case CodeGuildNotices:
+		return h.guildNotices(ctx, c, s, p)
+	case CodeGuildSite:
+		return h.guildSite(ctx, c, s, p)
+	case CodeGuildRanksConfig:
+		return h.guildRanksConfig(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta
@@ -295,6 +330,7 @@ func (h *Handler) OnDisconnect(c *netsrv.Conn) {
 		// Gravar antes de tirar da lista: os itens mudaram em memoria e nada
 		// mais vai ler esta sessao depois daqui.
 		h.saveItems(s)
+		h.guildOnDisconnect(s)
 		h.leaveParty(s)
 		h.removeFromEveryone(s)
 	}

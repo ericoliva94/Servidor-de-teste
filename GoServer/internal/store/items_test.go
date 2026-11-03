@@ -182,3 +182,64 @@ func TestTamanhosDeSkill(t *testing.T) {
 		t.Errorf("Others tem %d slots, PlayerData.pas diz 40", OtherSkillSlots)
 	}
 }
+
+// ---- guildas
+
+func TestClampGuildLevel(t *testing.T) {
+	casos := map[int64]uint8{
+		0: 0, 5: 5, 9: 9,
+		10: 9, 100: 9, 1 << 40: 9,
+		-1: 0, -100: 0,
+	}
+	for in, quer := range casos {
+		if got := clampGuildLevel(in); got != quer {
+			t.Errorf("clampGuildLevel(%d) = %d, queria %d", in, got, quer)
+		}
+	}
+}
+
+func TestParseRanksConfig(t *testing.T) {
+	casos := []struct {
+		in   string
+		quer []uint8
+	}{
+		{"1,2,3,4,5", []uint8{1, 2, 3, 4, 5}},
+		{"255,0,0,0,0", []uint8{255, 0, 0, 0, 0}},
+		// Valor acima de 255 e cortado, nao da a volta.
+		{"300,1", []uint8{255, 1}},
+		// Campo vazio vale zero.
+		{"", []uint8{0}},
+		// Mais campos que o vetor: os excedentes caem fora.
+		{"1,2,3,4,5,6,7", []uint8{1, 2, 3, 4, 5}},
+	}
+	for _, c := range casos {
+		got := parseRanksConfig(c.in)
+		if len(got) != len(c.quer) {
+			t.Errorf("parseRanksConfig(%q) = %v, queria %v", c.in, got, c.quer)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.quer[i] {
+				t.Errorf("parseRanksConfig(%q)[%d] = %d, queria %d",
+					c.in, i, got[i], c.quer[i])
+			}
+		}
+	}
+}
+
+func TestFormatRanksConfig(t *testing.T) {
+	if got := formatRanksConfig([]uint8{1, 2, 3, 4, 5}); got != "1,2,3,4,5" {
+		t.Errorf("= %q", got)
+	}
+	if got := formatRanksConfig(nil); got != "" {
+		t.Errorf("= %q", got)
+	}
+	// Ida e volta preserva os valores.
+	orig := []uint8{0, 17, 255, 1, 128}
+	volta := parseRanksConfig(formatRanksConfig(orig))
+	for i := range orig {
+		if volta[i] != orig[i] {
+			t.Errorf("ida e volta [%d] = %d, queria %d", i, volta[i], orig[i])
+		}
+	}
+}

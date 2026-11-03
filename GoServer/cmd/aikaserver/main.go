@@ -23,6 +23,7 @@ import (
 	"aika/internal/dropdata"
 	"aika/internal/game"
 	"aika/internal/gamedata"
+	"aika/internal/guild"
 	"aika/internal/mobdata"
 	"aika/internal/model"
 	"aika/internal/netsrv"
@@ -81,6 +82,7 @@ func run() error {
 		chars    game.Characters
 		items    game.ItemSource
 		skillDB  game.SkillStore
+		guildDB  game.GuildStore
 		numerics game.NumericStore
 		tokens   tokensrv.Store
 	)
@@ -91,6 +93,7 @@ func run() error {
 		numerics = noChars{}
 		items = noItems{}
 		skillDB = noSkills{}
+		guildDB = noGuilds{}
 	} else {
 		db, err := store.Open(ctx, store.Config{
 			Server:   cfg.MySQLServer,
@@ -114,6 +117,7 @@ func run() error {
 		numerics = cs
 		items = store.Items{DB: db}
 		skillDB = store.Skills{DB: db}
+		guildDB = store.Guilds{DB: db}
 	}
 
 	loginSrv := netsrv.New(netsrv.Config{
@@ -155,6 +159,10 @@ func run() error {
 		"especies", len(mobs.Species), "pontos", mobs.SpawnCount(),
 		"ativos", mundoMobs.Count())
 
+	// As guildas sobem do banco antes das portas: um jogador entrando antes
+	// disso apareceria sem guilda.
+	registroGuildas := guild.NewRegistry()
+
 	// O canal guarda quem esta conectado e aloca o ClientID. Sem ele o
 	// servidor atende o login mas ninguem ve ninguem.
 	canal := game.NewChannel(0, cfg.MaxUsers)
@@ -166,6 +174,8 @@ func run() error {
 		Chars:          chars,
 		Items:          items,
 		SkillDB:        skillDB,
+		GuildDB:        guildDB,
+		Guilds:         registroGuildas,
 		SkillTable:     tables,
 		Numerics:       numerics,
 		Durations:      skillfn.BuffSeconds{T: tables},
@@ -192,6 +202,23 @@ func run() error {
 		MaxConns: int(cfg.MaxUsers),
 		Log:      log,
 	}, canalHandler)
+
+	// Carrega as guildas depois de o banco estar de pe.
+	if guildDB != nil {
+		guildas, avisos, err := guildDB.All(ctx)
+		if err != nil {
+			// Guilda e estado de jogo, nao infraestrutura: o servidor sobe
+			// sem elas e registra o motivo.
+			log.Error("carregar guildas", "erro", err)
+		}
+		for _, a := range avisos {
+			log.Warn("guildas", "aviso", a)
+		}
+		for _, g := range guildas {
+			registroGuildas.Put(g)
+		}
+		log.Info("guildas carregadas", "quantidade", registroGuildas.Count())
+	}
 
 	// Abre as portas antes de anunciar: o original so descobria falha de bind
 	// pelo log, depois de dizer que havia iniciado.
@@ -392,6 +419,17 @@ func (noSkills) ByCharacter(context.Context, uint32) (model.SkillsList, []string
 }
 
 func (noSkills) Save(context.Context, uint32, model.SkillsList) error { return nil }
+
+// noGuilds devolve nenhuma guilda. Usado com -no-db.
+type noGuilds struct{}
+
+func (noGuilds) All(context.Context) ([]*guild.Guild, []string, error) {
+	return nil, nil, nil
+}
+
+func (noGuilds) Save(context.Context, *guild.Guild) error { return nil }
+
+func (noGuilds) Delete(context.Context, uint16) error { return nil }
 
 // noAccounts recusa todo login. Usado com -no-db.
 type noAccounts struct{}

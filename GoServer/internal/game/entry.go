@@ -290,6 +290,7 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	// acontecer depois do $925: antes dele o cliente nao tem mundo desenhado
 	// e descartaria os spawns.
 	h.sendSkillList(c, s)
+	h.enterGuild(c, s)
 	h.refreshVisible(s)
 	h.refreshVisibleMobs(s)
 	h.sendMapObjectsNear(s)
@@ -375,4 +376,40 @@ func (h *Handler) loadSkills(ctx context.Context, s *Session, charID uint32) mod
 		h.log().Warn("skills", "personagem", charID, "aviso", a)
 	}
 	return list
+}
+
+// enterGuild poe o jogador de volta na guilda ao entrar no mundo.
+//
+// Na origem isso dependia de SendMemberLogin, chamado do caminho de login; a
+// guilda vem do indice gravado no personagem, e o slot no vetor global era
+// recalculado por SearchAndSetGuildSlot em varios pontos. Aqui a guilda e
+// achada pelo id do personagem.
+func (h *Handler) enterGuild(c *netsrv.Conn, s *Session) {
+	if h.Guilds == nil {
+		return
+	}
+	g := h.Guilds.Of(s.CharID())
+	if g == nil {
+		// Personagem com guildindex no banco e sem linha em guilds_players
+		// nao esta em guilda nenhuma: a origem mandava o pacote de guilda com
+		// o indice gravado e o cliente mostrava uma guilda que nao existe.
+		if s.Avatar.GuildIndex != 0 {
+			h.log().Warn("personagem com guilda que nao existe",
+				"personagem", s.Avatar.Name, "indice", s.Avatar.GuildIndex)
+			s.Avatar.GuildIndex = 0
+		}
+		return
+	}
+	s.Avatar.GuildIndex = g.Index
+	s.Avatar.GuildName = g.Name
+	if m := g.MemberAt(g.FindMember(s.CharID())); m != nil {
+		m.Logged = true
+		m.LastLogin = h.now()
+		// O nivel e a classe do membro acompanham o personagem.
+		m.Level = uint8(min(s.Avatar.Level, 255))
+		m.ClassInfo = uint8(min(s.Avatar.ClassInfo, 255))
+	}
+	h.sendGuildInfo(c, s, g)
+	h.sendGuildPlayers(c, s, g)
+	h.broadcastGuild(g, s)
 }

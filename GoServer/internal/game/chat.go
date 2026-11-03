@@ -83,7 +83,9 @@ func (h *Handler) clientSay(ctx context.Context, c *netsrv.Conn, s *Session, p p
 		return h.shout(c, s, pkt)
 	case ChatParty:
 		return h.partyChat(c, s, pkt)
-	case ChatWhisper, ChatGuild, ChatAlly, ChatNation, ChatMegafone:
+	case ChatGuild:
+		return h.guildChat(c, s, pkt)
+	case ChatWhisper, ChatAlly, ChatNation, ChatMegafone:
 		// Grupo, guilda, alianca e nacao dependem de sistemas que ainda nao
 		// estao portados; ver GoServer/PORTE.md. Avisar e melhor que o
 		// silencio da origem, em que o jogador digitava e nada acontecia.

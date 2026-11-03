@@ -77,7 +77,8 @@ de evidências.
 | 10l | Grupo: convidar (`$322`), aceitar (`$323`), sair/expulsar (`$324`), desfazer (`$325`), liderança (`$34B`), pedir entrada (`$38F`), estado (`$326`), posição (`$11D`) e conversa de grupo | `PartyData.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (sem raid) |
 | 10m | Skills: aprender (`$31C`), lançar (`$320`), zerar (`$32A`), cancelar (`$327`), listas (`$106`/`$107`), recarga, custo de MP e buff | `SkillFunctions.pas`, `PacketHandlers.pas`, `BaseMob.pas` | **pronto** (motor genérico; os casos especiais por skill ficam para a fase seguinte) |
 | 10n | Drop: carga das 13 listas, sorteio, item no chão (`$33B`), coleta (`$336`) e expiração | `Load.pas`, `BaseMob.pas` (`DropItemFor`), `ServerSocket.pas` (`CreateMapObject`) | **pronto** |
-| 10o | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10o | Guilda: criar (`$341`), convite (`$F7B`/`$67D`/`$F7E`), expulsar (`$F2D`), sair (`$F1C`), rank (`$F1D`), mestre (`$619`), avisos (`$F20`), site (`$F21`), permissões (`$F22`), info (`$965`), membros (`$97F`) e conversa de guilda | `GuildData.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (sem baú, aliança, skill de guilda nem cerco) |
+| 10p | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -696,6 +697,48 @@ cliente e sem checar a faixa do vetor, e **sem checar distância**: bastava o
 sem trava, com uma thread por jogador: dois jogadores clicando no mesmo item
 podiam levar os dois. Agora o item sai do chão sob trava, antes de ser
 entregue.
+
+**`guild.Guild.MemberAt`, índice −1** — `OpenChest` escrevia
+`Self.Members[Self.FindMemberFromCharIndex(CharIndex)].Rank` **direto**, e
+`FindMemberFromCharIndex` devolve **−1** quando não acha: aquilo lia
+`Members[-1]`, antes do início do vetor, e o byte lido virava o rank usado na
+checagem de permissão.
+
+**`guild.Guild.Capacity`** — `MaxGuildPlayersOfLevel[Self.Level]` com `Level`
+sendo `DWORD` e o vetor `ARRAY [0..9]`: guilda de nível acima de 9 lia fora do
+vetor, e o limite de membros saía de um byte qualquer da memória.
+
+**`guild.Guild.RankConfigOf`** — `Self.RanksConfig[Rank]` com `Rank` sendo
+`Integer` e o vetor `ARRAY [0..4]`. O rank vem do registro do membro, que vem
+do banco: um rank fora de 0..4 lia fora do vetor e as permissões saíam de
+memória qualquer.
+
+**`guild.Guild.SetRanksConfig`** — `Move(RanksConfig, Self.RanksConfig, 4)`
+copiava **4 bytes num vetor de 5**: a configuração do rank 4 **nunca** era
+atualizada, ficando com o que estava na memória desde a criação da guilda.
+
+**`store.Guilds.loadMembers`** — `Guilds[Slot].Members[R]` com `R` apenas
+incrementando por linha, **sem checar** o limite `ARRAY [0..127]`. Uma guilda
+com 129 linhas em `guilds_players` escrevia depois do fim de `Members` — e o
+que vem depois no registro é o **baú da guilda**. O nome do membro era copiado
+com `Move(..., Length(nome))`, sem limite: um nome de mais de 20 caracteres
+passava por cima de `Rank`, `ClassInfo`, `Level` e `Logged`.
+
+**`Logged` lido do banco** — a origem gravava a coluna e a lia de volta na
+carga, o que deixava membro marcado como online depois de o servidor cair. No
+Go quem está online é quem está no canal agora.
+
+**`game.enterGuild`** — personagem com `guildindex` no banco e sem linha em
+`guilds_players` não está em guilda nenhuma, mas a origem mandava o pacote de
+guilda com o índice gravado e o cliente mostrava uma guilda que não existe.
+Agora o caso é reportado e o índice é limpo.
+
+**Convite reutilizável** — como no grupo, `InviteToGuildAccept` lia o
+requisitante e não o limpava.
+
+**`TGuild.TCloseChestThread`** — `OpenChest` criava uma `TThread` **por
+abertura** e nunca a liberava, com um laço `Sleep(50)` até o baú fechar. O
+baú não foi portado; quando for, isso vira um prazo no laço do servidor.
 
 **`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da

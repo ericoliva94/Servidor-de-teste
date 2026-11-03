@@ -90,6 +90,8 @@ type Session struct {
 	// PartyRequester e quem convidou este jogador para um grupo, zero quando
 	// nao ha convite pendente.
 	PartyRequester uint16
+	// GuildRequester e quem convidou este jogador para uma guilda.
+	GuildRequester uint16
 
 	// Avatar e o personagem escolhido, do jeito que os outros clientes o
 	// veem. So tem conteudo a partir do Playing.
@@ -130,4 +132,16 @@ func NewSession(channel uint8) *Session {
 			Targets:   entity.NewTargetList(),
 		},
 	}
+}
+
+// CharID devolve o id do personagem em jogo, zero quando nenhum.
+//
+// E a chave que a guilda usa: o original guardava
+// Character.Base.CharIndex no registro do personagem e o repetia em
+// GuildIndex e GuildSlot, que precisavam ficar em sincronia a mao.
+func (s *Session) CharID() uint32 {
+	if s == nil || s.SelectedSlot < 0 || s.SelectedSlot >= len(s.Characters) {
+		return 0
+	}
+	return s.Characters[s.SelectedSlot].ID
 }
