@@ -20,6 +20,7 @@ import (
 
 	"aika/internal/auth"
 	"aika/internal/config"
+	"aika/internal/dropdata"
 	"aika/internal/game"
 	"aika/internal/gamedata"
 	"aika/internal/mobdata"
@@ -136,6 +137,20 @@ func run() error {
 		log.Warn("tabelas de mob", "aviso", a)
 	}
 	mundoMobs := game.NewMobWorld(mobs)
+
+	// As listas de drop vem de treze CSV; ausencia e aviso, como em Load.pas.
+	drops, err := dropdata.Load(*dataDir)
+	if err != nil {
+		return fmt.Errorf("carregar listas de drop: %w", err)
+	}
+	for _, a := range drops.Avisos {
+		log.Warn("listas de drop", "aviso", a)
+	}
+	if len(drops.Missing) > 0 {
+		log.Warn("listas de drop ausentes", "arquivos", drops.Missing)
+	}
+	log.Info("listas de drop carregadas",
+		"categorias", dropdata.CategoryCount, "itens", drops.Total())
 	log.Info("mobs carregados",
 		"especies", len(mobs.Species), "pontos", mobs.SpawnCount(),
 		"ativos", mundoMobs.Count())
@@ -161,6 +176,9 @@ func run() error {
 		ServerVersion:  uint16(cfg.Version),
 		Mobs:           mundoMobs,
 		Parties:        game.NewPartyRegistry(),
+		Drops:          drops,
+		MapObjs:        game.NewMapObjects(),
+		DropRateBonus:  cfg.DropRateBonus,
 		Exp:            tables,
 		ExpMultiplier:  cfg.ExpMultiplier,
 		MobEsquiva:     cfg.MobEsquiva,
@@ -217,6 +235,7 @@ func run() error {
 	// ninguem por perto ele ficava morto indefinidamente.
 	go respawnLoop(ctx, canalHandler, log)
 	go mobAILoop(ctx, canalHandler, log)
+	go mapObjectLoop(ctx, canalHandler, log)
 
 	tarefas := 2
 	errc := make(chan error, 3)
@@ -284,6 +303,29 @@ func mobAILoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
 		case t := <-andar.C:
 			if n := h.MobMoveTickRun(t); n > 0 {
 				log.Debug("mobs andaram", "quantidade", n)
+			}
+		}
+	}
+}
+
+// mapObjectInterval e o passo com que o servidor confere os objetos no chao.
+const mapObjectInterval = 10 * time.Second
+
+// mapObjectLoop tira do chao os itens que passaram do tempo.
+//
+// A origem nao apagava o objeto de drop por tempo: ele ficava no vetor OBJ
+// ate alguem coletar, e com o vetor cheio CreateMapObject passava a recusar
+// todo drop novo.
+func mapObjectLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
+	t := time.NewTicker(mapObjectInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if n := h.MapObjectTick(); n > 0 {
+				log.Debug("itens do chao expirados", "quantidade", n)
 			}
 		}
 	}

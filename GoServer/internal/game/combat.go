@@ -213,6 +213,7 @@ func (h *Handler) broadcastMobDamage(s *Session, m *Mob, tipo combat.DamageType,
 // FirstPlayerAttacker. Mantido: a experiencia vai para quem matou.
 func (h *Handler) onMobDeath(c *netsrv.Conn, s *Session, m *Mob, sp *mobdata.Species) {
 	ganho := h.addExp(c, s, int64(sp.Exp), ExpTypeMob)
+	h.dropFromMob(c, s, m, sp.DropIndex)
 	h.log().Debug("mob morto",
 		"mob", sp.Name, "id", m.ClientID,
 		"por", s.Avatar.Name, "exp", ganho)

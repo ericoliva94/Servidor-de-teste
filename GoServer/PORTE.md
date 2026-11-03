@@ -76,7 +76,8 @@ de evidências.
 | 10k | IA de mob: patrulha, perseguição e golpe no jogador | `MOB.pas` (`MobHandler`, `MobMoviment`, `AttackPlayer`) | **pronto** (sem skill de mob nem guarda) |
 | 10l | Grupo: convidar (`$322`), aceitar (`$323`), sair/expulsar (`$324`), desfazer (`$325`), liderança (`$34B`), pedir entrada (`$38F`), estado (`$326`), posição (`$11D`) e conversa de grupo | `PartyData.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (sem raid) |
 | 10m | Skills: aprender (`$31C`), lançar (`$320`), zerar (`$32A`), cancelar (`$327`), listas (`$106`/`$107`), recarga, custo de MP e buff | `SkillFunctions.pas`, `PacketHandlers.pas`, `BaseMob.pas` | **pronto** (motor genérico; os casos especiais por skill ficam para a fase seguinte) |
-| 10n | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10n | Drop: carga das 13 listas, sorteio, item no chão (`$33B`), coleta (`$336`) e expiração | `Load.pas`, `BaseMob.pas` (`DropItemFor`), `ServerSocket.pas` (`CreateMapObject`) | **pronto** |
+| 10o | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -656,6 +657,45 @@ calcula o cooldown novo e **nunca chama `SendPacket`**. Não foi portado.
 **Custo de MP descontado depois da validação** — na origem o MP saía dentro de
 `AttackTarget`, depois de vários `Exit` possíveis; aqui o desconto é o último
 passo antes de a skill sair, então nenhuma recusa cobra mana.
+
+**`dropdata.Category.Roll`, a raridade subia em vez de descer** — quando a
+raridade sorteada não tinha item, `DropItemFor` fazia
+`ItemTypeFrom := ItemTypeFrom + 1; goto`, isto é, normal caía em superior,
+superior em rara e rara em lendária. **Com os dados que acompanham o
+servidor isso é grave:** as categorias de Planta, Croshu Azul e Croshu
+Vermelho têm item **apenas** na raridade lendária, e a faixa normal do sorteio
+cobre 67 dos 100 valores — dois terços das mortes desses mobs entregavam um
+item lendário. No Go a busca desce para a raridade mais comum, e só sobe
+quando não há nada abaixo. Os quatro avisos que o servidor imprime na carga
+apontam exatamente essas categorias.
+
+**`DropItemFor`, o laço que não termina** — os dois ramos da origem tratavam a
+lendária vazia de formas diferentes: no de mob comum, `Exit` (nenhum drop); no
+de chefe (`InitHP > 999999`), `ItemTypeFrom := 1; goto ReCase`, voltando à
+primeira raridade. Com as quatro raridades vazias esse segundo ramo **gira para
+sempre dentro da morte do mob**. Nenhuma categoria dos arquivos de hoje está
+com as quatro vazias, então não é alcançável agora — mas basta um arquivo vazio
+para travar o servidor ali.
+
+**`TLoad.InitDropList`** — o mesmo bloco de ~60 linhas copiado **treze vezes**,
+uma por arquivo, cada cópia com seus quatro contadores e seu `case` de quatro
+ramos: cerca de 800 linhas que no Go são um laço. Cada cópia fazia também
+`SetLength(..., Count + 1)` por linha lida, realocando o vetor a cada item. E
+`FileStrings[2]` sem checar o número de colunas: uma linha curta levantava
+exceção e abortava a carga, deixando os arquivos seguintes sem ler.
+
+**`game.MapObjects`, objeto que nunca expira** — a origem não apagava o objeto
+de drop por tempo: ele ficava no vetor `OBJ` até alguém coletar, e com o vetor
+cheio `CreateMapObject` passava a recusar **todo** drop novo com "Erro ao criar
+o objeto no mapa. Abra um ticket no suporte." Agora o objeto expira e o laço do
+servidor limpa o chão.
+
+**`game.collectMapItem`** — `Servers[].OBJ[Packet.Index]` com o índice vindo do
+cliente e sem checar a faixa do vetor, e **sem checar distância**: bastava o
+índice para pegar um item do outro lado do mapa. A coleta também mexia no vetor
+sem trava, com uma thread por jogador: dois jogadores clicando no mesmo item
+podiam levar os dois. Agora o item sai do chão sob trava, antes de ser
+entregue.
 
 **`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da

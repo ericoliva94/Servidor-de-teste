@@ -11,6 +11,7 @@ import (
 
 	"aika/internal/auth"
 	"aika/internal/combat"
+	"aika/internal/dropdata"
 	"aika/internal/entity"
 	"aika/internal/itemfn"
 	"aika/internal/model"
@@ -73,6 +74,13 @@ type Handler struct {
 	Mobs *MobWorld
 	// Parties guarda os grupos deste canal.
 	Parties *PartyRegistry
+	// Drops e a tabela de listas de drop.
+	Drops *dropdata.Table
+	// MapObjs guarda os objetos no chao.
+	MapObjs *MapObjects
+	// DropRateBonus e o efeito de reliquia que empurra o sorteio para as
+	// raridades maiores.
+	DropRateBonus uint16
 	// Exp e a tabela de experiencia por nivel (ExpList).
 	Exp ExpTable
 	// ExpMultiplier e o EXP_MULTIPLIER do .ini; zero usa 1.
@@ -162,6 +170,10 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.resetSkills(ctx, c, s, p)
 	case CodeCancelSkill:
 		return h.cancelSkill(ctx, c, s, p)
+	case CodeCollectMapItem:
+		return h.collectMapItem(ctx, c, s, p)
+	case CodeCancelCollect:
+		return h.cancelCollect(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta

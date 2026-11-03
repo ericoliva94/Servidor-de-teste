@@ -121,6 +121,7 @@ func (h *Handler) movement(ctx context.Context, c *netsrv.Conn, s *Session, p pr
 		s.AnchorPosition = s.Position
 		h.refreshVisible(s)
 		h.refreshVisibleMobs(s)
+		h.sendMapObjectsNear(s)
 		// Sair de perto fecha o NPC aberto, como no original.
 		s.OpenedNPC = 0
 		s.OpenedOption = 0

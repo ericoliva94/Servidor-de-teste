@@ -112,6 +112,9 @@ type Server struct {
 	MobEsquiva  uint16
 	MobCritRes  uint16
 	MobDuploRes uint16
+	// DropRateBonus e o EF_RELIQUE_DROP_RATE: desconta do numero sorteado e
+	// empurra o drop para as raridades maiores.
+	DropRateBonus uint16
 
 	MySQLServer   string
 	MySQLPort     int
@@ -162,6 +165,7 @@ func FromINI(ini *INI) Server {
 		MobEsquiva:    clampDistance(ini.Int("GAMESERVERCONF", "MOB_ESQUIVA", 0)),
 		MobCritRes:    clampDistance(ini.Int("GAMESERVERCONF", "MOB_CRIT_RES", 0)),
 		MobDuploRes:   clampDistance(ini.Int("GAMESERVERCONF", "MOB_DUPLO_RES", 0)),
+		DropRateBonus: clampDistance(ini.Int("GAMESERVERCONF", "DROP_RATE_BONUS", 0)),
 
 		MySQLServer:   ini.String("MySQL", "Server", "127.0.0.1"),
 		MySQLPort:     ini.Int("MySQL", "Port", 3306),

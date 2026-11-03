@@ -292,6 +292,7 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	h.sendSkillList(c, s)
 	h.refreshVisible(s)
 	h.refreshVisibleMobs(s)
+	h.sendMapObjectsNear(s)
 	return nil
 }
 
