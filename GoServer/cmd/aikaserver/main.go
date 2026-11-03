@@ -209,6 +209,7 @@ func run() error {
 	// jogador: na origem o mob so voltava quando alguem passava perto, e sem
 	// ninguem por perto ele ficava morto indefinidamente.
 	go respawnLoop(ctx, canalHandler, log)
+	go mobAILoop(ctx, canalHandler, log)
 
 	tarefas := 2
 	errc := make(chan error, 3)
@@ -248,6 +249,34 @@ func respawnLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
 		case <-t.C:
 			if n := h.RespawnTick(); n > 0 {
 				log.Debug("mobs de volta ao mapa", "quantidade", n)
+			}
+		}
+	}
+}
+
+// mobAILoop faz os mobs andarem e atacarem.
+//
+// Na origem eram nove threads por canal: tres de spawn e tres de ataque a
+// cada 1000 ms e tres de movimento a cada 600 ms, cada uma varrendo um terco
+// do vetor de 22.500 posicoes mesmo com o mapa vazio. Aqui sao dois tickers
+// com os mesmos tempos, e a varredura e so sobre os mobs que algum jogador
+// esta vendo.
+func mobAILoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
+	atacar := time.NewTicker(game.MobAttackTick)
+	defer atacar.Stop()
+	andar := time.NewTicker(game.MobMoveTick)
+	defer andar.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case t := <-atacar.C:
+			if n, _ := h.MobTick(t); n > 0 {
+				log.Debug("mobs atacaram", "quantidade", n)
+			}
+		case t := <-andar.C:
+			if n := h.MobMoveTickRun(t); n > 0 {
+				log.Debug("mobs andaram", "quantidade", n)
 			}
 		}
 	}

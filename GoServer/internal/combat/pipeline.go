@@ -20,6 +20,10 @@ const (
 	BuffAbsorb142    = 142
 	BuffReflection   = 38
 	BuffPointDefence = 32
+	// BuffBlock19 e BuffBlock91 zeram o golpe recebido e sao consumidos no
+	// uso. Em GetDamage eles davam Block e Miss2.
+	BuffBlock19 = 19
+	BuffBlock91 = 91
 )
 
 // MaxDamage e o teto de AttackParse. Acima disso o dano vira 1, nao o teto:

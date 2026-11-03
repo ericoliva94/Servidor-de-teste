@@ -36,6 +36,16 @@ type Mob struct {
 	Dead   bool
 	DeadAt time.Time
 
+	// State diz para onde a patrulha esta indo (o MovedTo da origem).
+	State MobState
+	// Moves conta os passos desde o ultimo pacote de movimento
+	// (MovimentsTime na origem).
+	Moves int
+	// LastMove e LastAttack sao os instantes do ultimo passo e do ultimo
+	// golpe (LastMoviment e LastMyAttack na origem).
+	LastMove   time.Time
+	LastAttack time.Time
+
 	// AttackerID e quem bateu por ultimo; FirstAttackerID e quem bateu
 	// primeiro, que na origem decidia quem leva o drop.
 	AttackerID      uint16

@@ -73,7 +73,8 @@ de evidências.
 | 10h | Inventário em jogo: mover (`$70F`), descartar (`$32C`), empilhar, gravar na saída | `PacketHandlers.pas`, `ItemFunctions.pas`, `Player.pas` | **pronto** (inventário↔equipamento; armazém, baú de guilda e pran a fazer) |
 | 10i | Atributos derivados (`GetCurrentScore`), ataque básico (`$302`), morte e revive (`$303`) | `BaseMob.pas`, `PacketHandlers.pas` | **pronto** (sem skill, dungeon, pran nem mascote) |
 | 10j | Mobs: carga dos dois CSV, spawn (`$35E`), visibilidade, golpe, morte, experiência (`$108`) e respawn | `ServerSocket.pas`, `MOB.pas`, `Player.pas` | **pronto** (sem IA de movimento nem ataque do mob) |
-| 10k | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10k | IA de mob: patrulha, perseguição e golpe no jogador | `MOB.pas` (`MobHandler`, `MobMoviment`, `AttackPlayer`) | **pronto** (sem skill de mob nem guarda) |
+| 10l | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -536,6 +537,41 @@ fazia **todo mob dar zero de experiência**. Agora zero vale 1, como o valor de
 **`game.hitMob`, alcance** — mesma falta de checagem do ataque entre jogadores:
 bastava o `ClientID` do mob. Agora o mob precisa estar dentro de
 `AttackRange`.
+
+**`game.mobPatrolStep`, o mob que nunca chegava** — a chegada era
+`if (CurrentPos.Distance(DestPos) <= 0)`, e `Distance` devolve um `WORD`
+truncado. Com passo de 1.5 e limite de 2 células por eixo, o mob para a **1.5
+célula** do destino: a distância truncada vale 1, o teste nunca fecha, o mob
+fica preso ali para sempre e nunca inverte o sentido. Pior: `MovimentsTime`
+continua subindo, então a cada dois ticks sai um pacote de movimento **com a
+mesma posição**, para todo mob em patrulha do mapa. Agora a chegada é o momento
+em que nenhum eixo consegue mais andar.
+
+**`DestMoveWait` nunca lido** — a origem carrega a coluna do CSV e usa
+`InitMoveWait` nos **dois** sentidos da patrulha. A coluna existia e não fazia
+nada. Agora cada sentido usa a sua.
+
+**`game.mobAttackStep`, alvo que foi embora** — o teste era
+`if(Players[AttackerID].Status < Playing) then Exit`, que só saía do
+procedimento: o mob ficava preso num alvo que desconectou e **nunca voltava ao
+ponto de spawn**. Agora ele esquece o alvo. Também ganhou um alcance de
+desistência (`MobLeashRange`), que a origem não tinha: lá a perseguição não
+terminava.
+
+**`game.stepToward`** — a origem não validava a posição do mob em momento
+nenhum. Um destino errado no CSV levava o mob para fora do mapa, e dali para as
+contas de distância de todos os jogadores. Agora o passo que sairia do mapa é
+descartado.
+
+**`game.activeMobs`** — nove threads por canal (três de spawn e três de ataque
+a cada 1000 ms, três de movimento a cada 600 ms) varriam cada uma um terço do
+vetor de 22.500 posições, **mesmo com o mapa vazio**. Agora são dois tickers com
+os mesmos tempos, e só os mobs que algum jogador está vendo entram na varredura.
+
+**`game.mobTarget.Notify`** — no reflexo de dano a origem mandava a mensagem
+por `Players[mob.ClientID].SendClientMessage`, com `ClientID` de mob acima de
+1000 num vetor de 1000 posições. Mob não recebe mensagem, e agora isso é
+explícito.
 
 **`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da
