@@ -285,6 +285,7 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	// acontecer depois do $925: antes dele o cliente nao tem mundo desenhado
 	// e descartaria os spawns.
 	h.refreshVisible(s)
+	h.refreshVisibleMobs(s)
 	return nil
 }
 

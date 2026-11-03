@@ -22,6 +22,7 @@ import (
 	"aika/internal/config"
 	"aika/internal/game"
 	"aika/internal/gamedata"
+	"aika/internal/mobdata"
 	"aika/internal/model"
 	"aika/internal/netsrv"
 	"aika/internal/store"
@@ -117,16 +118,29 @@ func run() error {
 		Log:      log,
 	}, &auth.Handler{Accounts: accounts})
 
+	// Os mobs vem de dois CSV; ausencia e aviso, nao erro, como em Load.pas.
+	mobs, err := mobdata.Load(*dataDir)
+	if err != nil {
+		if errors.Is(err, mobdata.ErrNotFound) {
+			log.Warn("tabelas de mob ausentes: o servidor sobe sem mobs",
+				"erro", err)
+		} else {
+			return fmt.Errorf("carregar mobs: %w", err)
+		}
+	}
+	for _, a := range mobs.Avisos {
+		log.Warn("tabelas de mob", "aviso", a)
+	}
+	mundoMobs := game.NewMobWorld(mobs)
+	log.Info("mobs carregados",
+		"especies", len(mobs.Species), "pontos", mobs.SpawnCount(),
+		"ativos", mundoMobs.Count())
+
 	// O canal guarda quem esta conectado e aloca o ClientID. Sem ele o
 	// servidor atende o login mas ninguem ve ninguem.
 	canal := game.NewChannel(0, cfg.MaxUsers)
 
-	channelSrv := netsrv.New(netsrv.Config{
-		Name:     "canal",
-		Addr:     cfg.ChannelAddr,
-		MaxConns: int(cfg.MaxUsers),
-		Log:      log,
-	}, &game.Handler{
+	canalHandler := &game.Handler{
 		Channel:        0,
 		Chan:           canal,
 		Accounts:       accounts,
@@ -139,7 +153,20 @@ func run() error {
 		ForgetDistance: cfg.DistanceToForget,
 		Log:            log,
 		ServerVersion:  uint16(cfg.Version),
-	})
+		Mobs:           mundoMobs,
+		Exp:            tables,
+		ExpMultiplier:  cfg.ExpMultiplier,
+		MobEsquiva:     cfg.MobEsquiva,
+		MobCritRes:     cfg.MobCritRes,
+		MobDuploRes:    cfg.MobDuploRes,
+	}
+
+	channelSrv := netsrv.New(netsrv.Config{
+		Name:     "canal",
+		Addr:     cfg.ChannelAddr,
+		MaxConns: int(cfg.MaxUsers),
+		Log:      log,
+	}, canalHandler)
 
 	// Abre as portas antes de anunciar: o original so descobria falha de bind
 	// pelo log, depois de dizer que havia iniciado.
@@ -178,6 +205,11 @@ func run() error {
 	ctx, cancelAll := context.WithCancel(ctx)
 	defer cancelAll()
 
+	// O respawn de mob roda no servidor, nao dentro da visibilidade de um
+	// jogador: na origem o mob so voltava quando alguem passava perto, e sem
+	// ninguem por perto ele ficava morto indefinidamente.
+	go respawnLoop(ctx, canalHandler, log)
+
 	tarefas := 2
 	errc := make(chan error, 3)
 	for _, srv := range []*netsrv.Server{loginSrv, channelSrv} {
@@ -199,6 +231,26 @@ func run() error {
 	}
 	log.Info("servidor encerrado")
 	return firstErr
+}
+
+// respawnInterval e o passo do laco de respawn. O tempo de cada mob vem da
+// coluna do CSV; este e so o passo em que o servidor confere.
+const respawnInterval = time.Second
+
+// respawnLoop devolve ao mundo os mobs cujo tempo de respawn passou.
+func respawnLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
+	t := time.NewTicker(respawnInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if n := h.RespawnTick(); n > 0 {
+				log.Debug("mobs de volta ao mapa", "quantidade", n)
+			}
+		}
+	}
 }
 
 // onlineCounter informa quantos jogadores estao conectados, somando as duas

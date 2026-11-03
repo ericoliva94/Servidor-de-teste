@@ -72,7 +72,8 @@ de evidências.
 | 10g | Conversa (`$F86`), rotação (`$305`), info de personagem (`$22C`/`$19E`), hora (`$202`) | `PacketHandlers.pas`, `Player.pas` | **pronto** |
 | 10h | Inventário em jogo: mover (`$70F`), descartar (`$32C`), empilhar, gravar na saída | `PacketHandlers.pas`, `ItemFunctions.pas`, `Player.pas` | **pronto** (inventário↔equipamento; armazém, baú de guilda e pran a fazer) |
 | 10i | Atributos derivados (`GetCurrentScore`), ataque básico (`$302`), morte e revive (`$303`) | `BaseMob.pas`, `PacketHandlers.pas` | **pronto** (sem skill, dungeon, pran nem mascote) |
-| 10j | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10j | Mobs: carga dos dois CSV, spawn (`$35E`), visibilidade, golpe, morte, experiência (`$108`) e respawn | `ServerSocket.pas`, `MOB.pas`, `Player.pas` | **pronto** (sem IA de movimento nem ataque do mob) |
+| 10k | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -477,6 +478,64 @@ isso foi mantido.
 `PlayerCharacter.SpeedMove` e recalculava do zero, sobrescrevendo o valor da
 coluna `speedmove`: montaria e buff de velocidade sumiam a cada recálculo.
 Agora o valor gravado só cede quando é zero.
+
+**`mobdata`, vetores no limite exato** — `MobsP: Array [0..49]` e
+`TMobS: Array [0..449]`, indexados **sem nenhuma checagem**. Os dados de hoje
+chegam exatamente no limite: 372 espécies e 49 pontos de spawn na maior delas.
+Bastava um ponto a mais em qualquer espécie, ou a 451ª espécie no arquivo, para
+corromper memória em silêncio. No Go o excedente é recusado e reportado.
+
+**`mobdata`, linha curta e campo inválido** — a origem chamava
+`FileStrings[17]` e `.ToInteger()` sem checar: uma linha curta ou um campo com
+lixo levantava exceção no meio da carga, e o servidor subia **sem o resto dos
+mobs**, sem dizer nada. Agora a linha é reportada e a carga segue.
+
+**`mobdata`, espécie sem atributos** — o piso de 3500 de HP estava dentro do
+ramo que casou o nome entre os dois CSV. Espécie presente no `MonsterListCSV`
+e ausente do `AllMobsInfo` ficava com HP zero: nascia morta. Agora recebe o
+piso e um aviso. (Nos dados reais os dois arquivos batem: 372 espécies, 5865
+pontos, zero avisos.)
+
+**`game.MobWorld.Hit`** — `Dec(Self.HP, Dano)` sem trava nenhuma, com uma
+thread por jogador: dois golpes simultâneos podiam perder um dos descontos ou
+**matar o mob duas vezes**, e a segunda morte dava experiência de novo. Agora o
+desconto é sob trava e a morte acontece uma vez só.
+
+**`game.MobWorld.Respawn`, virada de ano** — o teste da origem era
+`if (Self.DeadTime.Year >= Now.Year)`. Um mob morto em 31 de dezembro **nunca
+voltava** depois da meia-noite. Agora a conta é sobre a diferença de tempo.
+
+**`game.RespawnTick`** — o respawn acontecia dentro de
+`UpdateSpawnToPlayers`, isto é, o mob só voltava quando algum jogador passava
+perto o bastante para a rotina rodar com ele; sem ninguém por perto o mob
+ficava morto indefinidamente. Agora o laço é do servidor.
+
+**`game.buildSpawnMob`** — em `SpawnMob`, `Packet.CurHP := InitHP` (o máximo da
+espécie) e `Packet.MaxHp := MobsP[].HP` (a vida atual) estavam **trocados**:
+mob machucado aparecia com a barra cheia. E `Packet.CurMp := InitHP` pegava o
+MP do HP, o mesmo erro de cópia de `GetCreateMob`.
+
+**`game.sendMobSpawn`** — `SpawnMob` terminava com `Self.SendPacket` chamado
+**duas vezes seguidas** (a primeira sem ponto e vírgula), mandando o pacote de
+spawn em dobro a cada mob que entra na tela.
+
+**`game.addExp`** — `AddExp` fazia `ExpList[Self.Character.Base.Level]` com
+`ExpList` sendo vetor dinâmico e `Level` um `WORD`: nível acima do tamanho da
+tabela lia fora do vetor, e é o que acontece ao chegar no teto se o arquivo for
+menor que `LEVEL_CAP`. Agora a tabela diz se o nível existe. O parâmetro `out
+ExpPreReliq` só era atribuído no ramo `EXP_TYPE_MOB`, ficando indefinido nos
+outros dois — ele não foi portado porque nenhum chamador lê o valor.
+
+**`game.addLevel`** — `Inc(SkillPoint, ...)` e `Inc(Status, ...)` num `WORD`
+davam a volta a partir de 65535. Agora saturam.
+
+**`EXP_MULTIPLIER` zero** — a origem multiplicava sem checar; zero no `.ini`
+fazia **todo mob dar zero de experiência**. Agora zero vale 1, como o valor de
+`GlobalDefs.pas`.
+
+**`game.hitMob`, alcance** — mesma falta de checagem do ataque entre jogadores:
+bastava o `ClientID` do mob. Agora o mob precisa estar dentro de
+`AttackRange`.
 
 **`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da

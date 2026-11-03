@@ -120,6 +120,7 @@ func (h *Handler) movement(ctx context.Context, c *netsrv.Conn, s *Session, p pr
 	if s.Position.Distance(s.AnchorPosition) >= VisibilityThreshold {
 		s.AnchorPosition = s.Position
 		h.refreshVisible(s)
+		h.refreshVisibleMobs(s)
 		// Sair de perto fecha o NPC aberto, como no original.
 		s.OpenedNPC = 0
 		s.OpenedOption = 0

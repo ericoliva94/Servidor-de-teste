@@ -182,3 +182,16 @@ func (t *Tables) Reinforce3At(i int) *ArmorAttributeReinforce {
 	}
 	return &t.Reinforce3[i]
 }
+
+// ExpForLevel devolve a experiencia total do nivel.
+//
+// Implementa game.ExpTable. A origem fazia "ExpList[Level]" com ExpList sendo
+// vetor dinamico e Level um WORD: nivel acima do tamanho da tabela lia fora do
+// vetor, e isso acontece ao chegar no teto se o arquivo for menor que
+// LEVEL_CAP. Aqui o nivel fora da faixa e dito explicitamente.
+func (t *Tables) ExpForLevel(level uint16) (uint64, bool) {
+	if t == nil || int(level) >= len(t.Exp) {
+		return 0, false
+	}
+	return t.Exp[level], true
+}

@@ -7,6 +7,7 @@ import (
 
 	"aika/internal/combat"
 	"aika/internal/entity"
+	"aika/internal/mobdata"
 	"aika/internal/netsrv"
 	"aika/internal/packets"
 	"aika/internal/protocol"
@@ -85,6 +86,11 @@ func (h *Handler) attack(ctx context.Context, c *netsrv.Conn, s *Session, p prot
 	}
 	s.LastAttack = agora
 
+	// Mob e jogador vem no mesmo campo Index, separados pela faixa do id.
+	if IsMobTarget(pkt.Index) {
+		return h.hitMob(c, s, pkt.Index)
+	}
+
 	alvo, err := h.resolveAttackTarget(s, pkt.Index)
 	if err != nil {
 		return nil
@@ -92,6 +98,143 @@ func (h *Handler) attack(ctx context.Context, c *netsrv.Conn, s *Session, p prot
 
 	h.resolveHit(c, s, alvo)
 	return nil
+}
+
+// hitMob trata o golpe do jogador num mob.
+//
+// Porte do ramo de mob de AttackTarget com SendDamage. A origem resolvia o
+// mob por "MOBS.TMobS[mobid].MobsP[smid]", com os dois indices vindo de
+// conversoes sobre o ClientID e sem checagem de faixa nos vetores de 450 e 50
+// posicoes.
+func (h *Handler) hitMob(c *netsrv.Conn, s *Session, mobID uint16) error {
+	if h.Mobs == nil {
+		return nil
+	}
+	m, ok := h.Mobs.Get(mobID)
+	if !ok || m.Dead {
+		return nil
+	}
+	sp := h.Mobs.SpeciesOf(m)
+	if sp == nil {
+		return nil
+	}
+	// O mob tem de estar a vista, como qualquer alvo.
+	if !s.Position.InRange(m.Position, AttackRange) {
+		return nil
+	}
+
+	rnd := h.rand()
+	tipo := s.Roller.Roll(
+		combat.Attacker{
+			Critical: s.Avatar.Critical,
+			DuploAtk: s.Avatar.DuploAtk,
+			Acerto:   uint16(s.Avatar.Acerto),
+		},
+		combat.Defender{
+			CritRes:  h.MobCritRes,
+			DuploRes: h.MobDuploRes,
+			Esquiva:  h.MobEsquiva,
+		},
+		true, 0, rnd)
+
+	dano := 0
+	if tipo != combat.Miss {
+		atk := int(s.Avatar.AtkFis)
+		def := int(sp.DefFis)
+		if pen := int(s.Avatar.FisPenetration); pen > 0 {
+			def -= (def / 100) * pen
+		}
+		dano = atk - (def >> 3)
+		if dano <= 0 {
+			dano = 1
+		}
+		// O mesmo ruido do golpe entre jogadores.
+		baixo, alto := dano/20, dano/10
+		extra := 13
+		if alto > baixo {
+			extra += baixo + rnd.IntN(alto-baixo)
+		} else {
+			extra += baixo
+		}
+		dano = combat.ClampDamage(dano + extra)
+	}
+
+	morreu := h.Mobs.Hit(m, dano, s.ClientID, h.now())
+	h.broadcastMobDamage(s, m, tipo, dano)
+
+	if morreu {
+		h.onMobDeath(c, s, m, sp)
+	}
+	h.wearWeapon(c, s)
+	return nil
+}
+
+// broadcastMobDamage manda o $102 do golpe num mob a quem ve o mob.
+func (h *Handler) broadcastMobDamage(s *Session, m *Mob, tipo combat.DamageType, dano int) {
+	if h.Chan == nil {
+		return
+	}
+	var pkt packets.RecvDamagePacket
+	pkt.Header.Index = s.ClientID
+	pkt.AttackerID = s.ClientID
+	pkt.AttackerHP = s.Avatar.CurHP
+	pkt.AttackerPos.X = s.Position.X
+	pkt.AttackerPos.Y = s.Position.Y
+	pkt.TargetID = m.ClientID
+	pkt.DNType = uint8(tipo)
+	pkt.DANO = uint64(max(dano, 0))
+	pkt.MobCurrHP = m.CurHP
+	if m.Dead {
+		pkt.DeathPos.X = m.Position.X
+		pkt.DeathPos.Y = m.Position.Y
+	}
+
+	raw, err := netsrv.Marshal(CodeRecvDamage, pkt)
+	if err != nil {
+		h.log().Error("montar dano em mob", "mob", m.ClientID, "erro", err)
+		return
+	}
+	_ = h.Chan.SendTo(s.ClientID, raw)
+	// Quem tambem ve o mob precisa ver a barra cair.
+	for _, id := range h.Chan.PlayingIDs() {
+		if id == s.ClientID {
+			continue
+		}
+		outro, _, ok := h.Chan.Lookup(id)
+		if ok && outro.Base.VisibleMobs.Contains(m.ClientID) {
+			_ = h.Chan.SendTo(id, raw)
+		}
+	}
+}
+
+// onMobDeath da a experiencia e apaga o mob da tela de quem o via.
+//
+// Na origem a experiencia ia para quem deu o ultimo golpe, e o drop para
+// FirstPlayerAttacker. Mantido: a experiencia vai para quem matou.
+func (h *Handler) onMobDeath(c *netsrv.Conn, s *Session, m *Mob, sp *mobdata.Species) {
+	ganho := h.addExp(c, s, int64(sp.Exp), ExpTypeMob)
+	h.log().Debug("mob morto",
+		"mob", sp.Name, "id", m.ClientID,
+		"por", s.Avatar.Name, "exp", ganho)
+	h.broadcastMobRemove(m)
+}
+
+// RespawnTick devolve ao mundo os mobs cujo tempo passou e os desenha para
+// quem esta perto.
+//
+// Na origem isso acontecia dentro de UpdateSpawnToPlayers, isto e, o mob so
+// voltava quando algum jogador passava perto o bastante para a rotina rodar
+// com ele; sem jogador por perto o mob ficava morto indefinidamente, e o
+// contador de respawn nao corria. Aqui o laco e do servidor.
+func (h *Handler) RespawnTick() int {
+	if h.Mobs == nil {
+		return 0
+	}
+	voltaram := h.Mobs.Respawn(h.now())
+	for _, m := range voltaram {
+		h.broadcastMobSpawn(m)
+	}
+	return len(voltaram)
 }
 
 // resolveAttackTarget acha o alvo de um golpe, validando o id do cliente.
@@ -338,6 +481,7 @@ func (h *Handler) revive(ctx context.Context, c *netsrv.Conn, s *Session, p prot
 	}
 	h.sendStatus(c, s)
 	h.refreshVisible(s)
+	h.refreshVisibleMobs(s)
 	h.respawnToVisible(s)
 
 	h.log().Info("jogador reviveu",

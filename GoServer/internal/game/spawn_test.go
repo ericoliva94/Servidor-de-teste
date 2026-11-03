@@ -77,6 +77,20 @@ func (e *espiao) espera(t *testing.T) uint16 {
 	return e.proximo(t).code
 }
 
+// drena esvazia a fila de pacotes, esperando ate d por cada um.
+func (e *espiao) drena(d time.Duration) {
+	for {
+		select {
+		case _, ok := <-e.pacotes:
+			if !ok {
+				return
+			}
+		case <-time.After(d):
+			return
+		}
+	}
+}
+
 // nada confere que nenhum pacote chegou na janela dada.
 func (e *espiao) nada(t *testing.T, d time.Duration) {
 	t.Helper()

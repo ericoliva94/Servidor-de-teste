@@ -61,6 +61,17 @@ type Handler struct {
 	Numerics NumericStore
 	// Chan e o registro de quem esta conectado a este canal.
 	Chan *Channel
+	// Mobs e o mundo de mobs deste canal.
+	Mobs *MobWorld
+	// Exp e a tabela de experiencia por nivel (ExpList).
+	Exp ExpTable
+	// ExpMultiplier e o EXP_MULTIPLIER do .ini; zero usa 1.
+	ExpMultiplier uint16
+	// Atributos de defesa que todo mob tem, do .ini: MOB_ESQUIVA,
+	// MOB_CRIT_RES e MOB_DUPLO_RES.
+	MobEsquiva  uint16
+	MobCritRes  uint16
+	MobDuploRes uint16
 	// WatchDistance e o DISTANCE_TO_WATCH do .ini; zero usa o padrao.
 	WatchDistance uint16
 	// ForgetDistance e o DISTANCE_TO_FORGET do .ini; zero usa o padrao.

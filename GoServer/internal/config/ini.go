@@ -105,6 +105,14 @@ type Server struct {
 	DistanceToWatch  uint16
 	DistanceToForget uint16
 
+	// ExpMultiplier e o EXP_MULTIPLIER de GAMESERVERCONF.
+	ExpMultiplier uint16
+	// Atributos de defesa de todo mob: MOB_ESQUIVA, MOB_CRIT_RES e
+	// MOB_DUPLO_RES.
+	MobEsquiva  uint16
+	MobCritRes  uint16
+	MobDuploRes uint16
+
 	MySQLServer   string
 	MySQLPort     int
 	MySQLDatabase string
@@ -149,6 +157,11 @@ func FromINI(ini *INI) Server {
 
 		DistanceToWatch:  clampDistance(ini.Int("GAMESERVERCONF", "DISTANCE_TO_WATCH", 50)),
 		DistanceToForget: clampDistance(ini.Int("GAMESERVERCONF", "DISTANCE_TO_FORGET", 60)),
+
+		ExpMultiplier: clampDistance(ini.Int("GAMESERVERCONF", "EXP_MULTIPLIER", 1)),
+		MobEsquiva:    clampDistance(ini.Int("GAMESERVERCONF", "MOB_ESQUIVA", 0)),
+		MobCritRes:    clampDistance(ini.Int("GAMESERVERCONF", "MOB_CRIT_RES", 0)),
+		MobDuploRes:   clampDistance(ini.Int("GAMESERVERCONF", "MOB_DUPLO_RES", 0)),
 
 		MySQLServer:   ini.String("MySQL", "Server", "127.0.0.1"),
 		MySQLPort:     ini.Int("MySQL", "Port", 3306),
