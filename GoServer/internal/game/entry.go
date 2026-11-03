@@ -291,6 +291,7 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	// e descartaria os spawns.
 	h.sendSkillList(c, s)
 	h.enterGuild(c, s)
+	h.enterMail(ctx, c, s)
 	h.refreshVisible(s)
 	h.refreshVisibleMobs(s)
 	h.sendMapObjectsNear(s)

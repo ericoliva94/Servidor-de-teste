@@ -92,6 +92,8 @@ type Session struct {
 	PartyRequester uint16
 	// GuildRequester e quem convidou este jogador para uma guilda.
 	GuildRequester uint16
+	// CanSendMailTo e o destinatario que passou pela conferencia do $3F16.
+	CanSendMailTo string
 
 	// Avatar e o personagem escolhido, do jeito que os outros clientes o
 	// veem. So tem conteudo a partir do Playing.

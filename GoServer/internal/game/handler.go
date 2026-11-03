@@ -15,6 +15,7 @@ import (
 	"aika/internal/entity"
 	"aika/internal/guild"
 	"aika/internal/itemfn"
+	"aika/internal/mail"
 	"aika/internal/model"
 	"aika/internal/netsrv"
 	"aika/internal/packets"
@@ -58,6 +59,24 @@ type GuildStore interface {
 	Delete(ctx context.Context, index uint16) error
 }
 
+// MailStore guarda o correio dos personagens.
+type MailStore interface {
+	// Box le a caixa de um personagem.
+	Box(ctx context.Context, charID uint32) (*mail.Box, error)
+	// Add poe uma carta na caixa de um personagem, achado pelo nome.
+	Add(ctx context.Context, nome string, m mail.Mail) error
+	// Save grava uma carta que mudou.
+	Save(ctx context.Context, charID uint32, m mail.Mail) error
+	// Remove apaga uma carta.
+	Remove(ctx context.Context, charID uint32, index uint64) error
+	// MarkRead marca a carta como lida.
+	MarkRead(ctx context.Context, charID uint32, index uint64) error
+	// NextIndex devolve o proximo indice de carta.
+	NextIndex(ctx context.Context) (uint64, error)
+	// CharacterExists diz se o personagem existe.
+	CharacterExists(ctx context.Context, nome string) (bool, error)
+}
+
 // ItemSource busca e grava os itens de um personagem e de uma conta.
 type ItemSource interface {
 	Equip(ctx context.Context, charID uint32) (store.ItemSet, error)
@@ -76,6 +95,7 @@ type Handler struct {
 	Items    ItemSource
 	SkillDB  SkillStore
 	GuildDB  GuildStore
+	MailDB   MailStore
 	Numerics NumericStore
 	// Chan e o registro de quem esta conectado a este canal.
 	Chan *Channel
@@ -209,6 +229,14 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.guildSite(ctx, c, s, p)
 	case CodeGuildRanksConfig:
 		return h.guildRanksConfig(ctx, c, s, p)
+	case CodeMailConfirm:
+		return h.confirmMail(ctx, c, s, p)
+	case CodeMailSend:
+		return h.sendMail(ctx, c, s, p)
+	case CodeMailOpen:
+		return h.openMail(ctx, c, s, p)
+	case CodeMailWithdraw:
+		return h.withdrawMail(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta

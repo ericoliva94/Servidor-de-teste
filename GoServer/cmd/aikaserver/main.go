@@ -83,6 +83,7 @@ func run() error {
 		items    game.ItemSource
 		skillDB  game.SkillStore
 		guildDB  game.GuildStore
+		mailDB   game.MailStore
 		numerics game.NumericStore
 		tokens   tokensrv.Store
 	)
@@ -94,6 +95,7 @@ func run() error {
 		items = noItems{}
 		skillDB = noSkills{}
 		guildDB = noGuilds{}
+		mailDB = nil // sem banco nao ha correio
 	} else {
 		db, err := store.Open(ctx, store.Config{
 			Server:   cfg.MySQLServer,
@@ -118,6 +120,7 @@ func run() error {
 		items = store.Items{DB: db}
 		skillDB = store.Skills{DB: db}
 		guildDB = store.Guilds{DB: db}
+		mailDB = store.Mails{DB: db}
 	}
 
 	loginSrv := netsrv.New(netsrv.Config{
@@ -175,6 +178,7 @@ func run() error {
 		Items:          items,
 		SkillDB:        skillDB,
 		GuildDB:        guildDB,
+		MailDB:         mailDB,
 		Guilds:         registroGuildas,
 		SkillTable:     tables,
 		Numerics:       numerics,

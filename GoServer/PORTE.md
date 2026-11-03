@@ -78,7 +78,8 @@ de evidências.
 | 10m | Skills: aprender (`$31C`), lançar (`$320`), zerar (`$32A`), cancelar (`$327`), listas (`$106`/`$107`), recarga, custo de MP e buff | `SkillFunctions.pas`, `PacketHandlers.pas`, `BaseMob.pas` | **pronto** (motor genérico; os casos especiais por skill ficam para a fase seguinte) |
 | 10n | Drop: carga das 13 listas, sorteio, item no chão (`$33B`), coleta (`$336`) e expiração | `Load.pas`, `BaseMob.pas` (`DropItemFor`), `ServerSocket.pas` (`CreateMapObject`) | **pronto** |
 | 10o | Guilda: criar (`$341`), convite (`$F7B`/`$67D`/`$F7E`), expulsar (`$F2D`), sair (`$F1C`), rank (`$F1D`), mestre (`$619`), avisos (`$F20`), site (`$F21`), permissões (`$F22`), info (`$965`), membros (`$97F`) e conversa de guilda | `GuildData.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (sem baú, aliança, skill de guilda nem cerco) |
-| 10p | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10p | Correio: conferir (`$3F16`), enviar (`$3F15`), lista (`$3F17`), abrir/apagar (`$3F18`), retirar anexo (`$3F1A`), não lidas (`$3F1B`) | `MailFunctions.pas`, `CharacterMail.pas` | **pronto** (caixa no MySQL; ver abaixo) |
+| 10q | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -739,6 +740,50 @@ requisitante e não o limpava.
 **`TGuild.TCloseChestThread`** — `OpenChest` criava uma `TThread` **por
 abertura** e nunca a liberava, com um laço `Sleep(50)` até o baú fechar. O
 baú não foi portado; quando for, isso vira um prazo no laço do servidor.
+
+**O correio da origem estava não funcional** —
+`TMailFunctions.GetMails` tem o corpo **esvaziado**: é só `Result := True`,
+com a leitura do arquivo comentada. Disso decorre tudo o que segue.
+
+- **Toda carta recebida apagava a caixa inteira do destinatário.** `AddMail`
+  chama `GetMails` (que não lê nada e devolve `True`), deixa `MailCount` em
+  zero, faz `SetLength(Mails, 1)` e grava o arquivo com **uma** carta. A carta
+  anterior, com os itens anexados, desaparecia do disco.
+- **Nenhuma carta podia ser lida de volta.** `GetMail` e `GetMailSlot` varrem o
+  vetor que `GetMails` não preencheu.
+- Os laços `for i := Length(Mails) - 1 downto 0` com `i` declarado `BYTE`
+  (`GetMail`) ou `DWORD` (a sobrecarga) partem de **−1** num vetor vazio, o que
+  como inteiro sem sinal vira 255 ou 4294967295 e indexa um vetor nulo.
+
+Portar isso ao pé da letra seria portar perda de dado. No Go a caixa fica no
+MySQL, como o resto do estado de jogo, com os mesmos pacotes. O esquema das
+tabelas novas está em `GoServer/SCHEMA.sql`.
+
+**`SendCharacterMail`, item perdido na falha** — os itens saíam do inventário
+do remetente **antes** de `AddMail`, e um `AddMail` que falhasse devolvia
+`False` sem repor nada: o item sumia. Agora a carta é gravada primeiro e o
+inventário só muda depois.
+
+**`ConfirmSendMail`, destinatário inexistente** — a origem só guardava o nome
+em `Player.CanSendMailTo` e conferia a existência depois, na gravação, que
+criava o arquivo do destinatário **mesmo que ele não existisse**, deixando
+caixa de correio de personagem inexistente no disco. Agora o nome é conferido
+contra a tabela `characters`.
+
+**`LasMailIndex` / `IncMailIndex`** — o contador de índice de carta vivia num
+arquivo de 8 bytes (`Data/Mails/LastIndex.t3c`), lido e reescrito a cada envio
+**sem trava nenhuma**: dois envios ao mesmo tempo liam o mesmo valor e as duas
+cartas ficavam com o mesmo índice — e o índice é a chave que identifica a carta
+na caixa.
+
+**`SendRefreshMails`, total não enviado** — `Packet.MailsAmount` está
+comentado, então o cliente nunca sabia quantas cartas a caixa tem.
+
+**`RemoveExpiredMails`** — apagava a carta vencida **sem olhar o anexo**: item
+e ouro iam com ela. Agora a carta vencida com anexo fica.
+
+**Apagar carta com anexo** — a origem aceitava, e o item ia embora com a carta.
+Agora é recusado com mensagem.
 
 **`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da
