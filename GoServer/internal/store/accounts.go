@@ -23,7 +23,8 @@ func (a Accounts) ByUsername(ctx context.Context, username string) (auth.Account
 	const q = `
 		SELECT id, username, password_hash, last_token,
 		       COALESCE(last_token_creation_time, 0) AS last_token_creation_time,
-		       account_status, nation, ban_days
+		       account_status, nation, ban_days,
+		       COALESCE(account_type, 0) AS account_type
 		  FROM accounts
 		 WHERE username = :username
 		 LIMIT 1`
@@ -50,9 +51,10 @@ func (a Accounts) ByUsername(ctx context.Context, username string) (auth.Account
 		user         sql.NullString
 		pwHash       sql.NullString
 		banDays      int64
+		accType      int64
 	)
 	if err := rows.Scan(&acc.ID, &user, &pwHash, &token, &tokenCreated,
-		&status, &nation, &banDays); err != nil {
+		&status, &nation, &banDays, &accType); err != nil {
 		return auth.Account{}, false, fmt.Errorf("store: ler conta: %w", err)
 	}
 	if err := rows.Err(); err != nil {
@@ -71,6 +73,7 @@ func (a Accounts) ByUsername(ctx context.Context, username string) (auth.Account
 	acc.Status = clampToByte(status)
 	acc.Nation = clampToByte(nation)
 	acc.BanDays = int(banDays)
+	acc.Type = clampToByte(accType)
 	return acc, true, nil
 }
 

@@ -68,6 +68,10 @@ func (h *Handler) clientSay(ctx context.Context, c *netsrv.Conn, s *Session, p p
 		return c.SendStruct(CodePingReply, resp)
 	}
 
+	// O apelido que o cliente mandou, lido antes de ser sobrescrito: no
+	// sussurro ele e o destinatario ou, para um GM, o nome do comando.
+	apelidoDoCliente := strings.TrimSpace(netsrv.CString(pkt.Nick[:]))
+
 	// O cabecalho e o apelido vao com os dados do autor, nao com o que veio
 	// do cliente: a origem repassava o pacote como chegou, e tanto
 	// Header.Index quanto Nick sao escritos pelo cliente — dava para falar no
@@ -85,10 +89,20 @@ func (h *Handler) clientSay(ctx context.Context, c *netsrv.Conn, s *Session, p p
 		return h.partyChat(c, s, pkt)
 	case ChatGuild:
 		return h.guildChat(c, s, pkt)
-	case ChatWhisper, ChatAlly, ChatNation, ChatMegafone:
-		// Grupo, guilda, alianca e nacao dependem de sistemas que ainda nao
-		// estao portados; ver GoServer/PORTE.md. Avisar e melhor que o
-		// silencio da origem, em que o jogador digitava e nada acontecia.
+	case ChatWhisper:
+		// O sussurro e por onde o GM manda comando: a origem testava
+		// "AccountType >= GameMaster" e "Nick[0] = '/'", e passava o apelido
+		// como nome do comando e a fala como parametros
+		// (PacketHandlers.pas:1361).
+		if strings.HasPrefix(apelidoDoCliente, "/") {
+			return h.chatCommand(ctx, c, s, apelidoDoCliente, fala)
+		}
+		h.message(c, "Este canal de conversa ainda nao esta disponivel.")
+		return nil
+	case ChatAlly, ChatNation, ChatMegafone:
+		// Alianca, nacao e megafone dependem de sistemas que ainda nao estao
+		// portados; ver GoServer/PORTE.md. Avisar e melhor que o silencio da
+		// origem, em que o jogador digitava e nada acontecia.
 		h.message(c, "Este canal de conversa ainda nao esta disponivel.")
 		return nil
 	default:
@@ -307,4 +321,25 @@ func limitarTexto(s string, max int) string {
 		return s
 	}
 	return string(r[:max])
+}
+
+// chatCommand roda um comando de GM digitado no sussurro.
+//
+// A origem reescrevia o apelido como nome do comando e a fala como parametros,
+// mas nesse ponto ela ja tinha sobrescrito "pkt.Nick" com o nome do autor —
+// no porte o apelido original e lido antes dessa troca. O teste
+// TestComandoVemDoApelidoNaoDoNomeDoAutor fixa isso.
+func (h *Handler) chatCommand(ctx context.Context, c *netsrv.Conn, s *Session,
+	apelido, parametros string) error {
+	cc := &CommandContext{
+		Caller:     s,
+		CallerConn: c,
+		Origem:     OrigemChat,
+		Args:       strings.Fields(parametros),
+	}
+	resp := h.RunCommand(ctx, cc, apelido)
+	if resp != "" {
+		h.message(c, resp)
+	}
+	return nil
 }

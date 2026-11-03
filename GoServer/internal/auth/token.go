@@ -41,7 +41,20 @@ type Account struct {
 	Nation       uint8
 	// BanDays e a duracao da suspensao; zero significa permanente.
 	BanDays int
+	// Type e a coluna account_type: o TAccountType de PlayerData.pas, que
+	// decide quem pode usar comando de GM.
+	Type uint8
 }
+
+// Niveis de conta, o TAccountType de PlayerData.pas:11.
+const (
+	AccPlayer = iota
+	AccFounder
+	AccSponsor
+	AccModerator
+	AccGameMaster
+	AccAdmin
+)
 
 // Codigos de AccountStatus usados pelo servidor de token, de AikaGetToken.
 const (

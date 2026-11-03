@@ -94,3 +94,31 @@ func (h *Handler) sendCurrentHPMP(c *netsrv.Conn, s *Session) {
 		h.Chan.Broadcast(s.Base.VisiblePlayers.IDs(), raw)
 	}
 }
+
+// CodeRefreshMoney e o $312 de TPlayer.RefreshMoney.
+const CodeRefreshMoney = 0x312
+
+// MaxGold e o teto de ouro que o porte aceita.
+//
+// A origem guardava o ouro num Int64 e somava com "Inc(Gold, Value)" sem
+// olhar teto nenhum, com Value vindo de "Data[0].ToInt64" no comando de GM:
+// dois comandos com o maximo do Int64 davam a volta e deixavam o jogador com
+// ouro negativo. O teto aqui e o maior valor que o cliente mostra sem
+// estranheza.
+const MaxGold int64 = 999_999_999_999
+
+// sendRefreshMoney manda o $312 com o ouro da bolsa e do armazem.
+//
+// A origem punha $7535 no Index do cabecalho, um valor fixo que aparece em
+// varios pacotes de atualizacao dela.
+func (h *Handler) sendRefreshMoney(c *netsrv.Conn, s *Session) {
+	if c == nil || s == nil {
+		return
+	}
+	var pkt packets.RefreshMoneyPacket
+	pkt.Header.Index = s.ClientID
+	pkt.InventoryGold = uint64(max(s.Avatar.Gold, 0))
+	if err := c.SendStruct(CodeRefreshMoney, pkt); err != nil {
+		h.log().Debug("enviar ouro", "cliente", s.ClientID, "erro", err)
+	}
+}

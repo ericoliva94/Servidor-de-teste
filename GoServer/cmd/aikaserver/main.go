@@ -20,6 +20,7 @@ import (
 
 	"aika/internal/auth"
 	"aika/internal/config"
+	"aika/internal/console"
 	"aika/internal/dropdata"
 	"aika/internal/dungeon"
 	"aika/internal/dungeondata"
@@ -279,6 +280,26 @@ func run() error {
 		}
 	}
 
+	// O console so sobe com token. Na origem a porta 5555 aceitava qualquer
+	// conexao sem autenticacao e executava o que chegasse com poder de Admin
+	// (ConsoleSocket.pas:122-188); subir sem token seria portar a porta
+	// aberta.
+	consoleSrv := &console.Server{
+		Addr:  cfg.ConsoleAddr,
+		Token: cfg.ConsoleToken,
+		Run:   canalHandler,
+		Log:   log,
+	}
+	if err := consoleSrv.Listen(); err != nil {
+		if errors.Is(err, console.ErrNoToken) {
+			log.Warn("console desligado: defina AIKA_CONSOLE_TOKEN para abrir " +
+				"a porta de administracao")
+		} else {
+			return fmt.Errorf("abrir console: %w", err)
+		}
+		consoleSrv = nil
+	}
+
 	campos := []any{
 		"login", loginSrv.Addr().String(),
 		"canal", channelSrv.Addr().String(),
@@ -287,6 +308,9 @@ func run() error {
 	}
 	if tokenSrv != nil {
 		campos = append(campos, "token", tokenSrv.Addr().String())
+	}
+	if consoleSrv != nil {
+		campos = append(campos, "console", consoleSrv.Address())
 	}
 	log.Info("servidor pronto", campos...)
 
@@ -308,13 +332,17 @@ func run() error {
 	go dungeonLoop(ctx, canalHandler, log)
 
 	tarefas := 2
-	errc := make(chan error, 3)
+	errc := make(chan error, 4)
 	for _, srv := range []*netsrv.Server{loginSrv, channelSrv} {
 		go func(s *netsrv.Server) { errc <- s.Serve(ctx) }(srv)
 	}
 	if tokenSrv != nil {
 		tarefas++
 		go func() { errc <- tokenSrv.Serve(ctx) }()
+	}
+	if consoleSrv != nil {
+		tarefas++
+		go func() { errc <- consoleSrv.Serve(ctx) }()
 	}
 
 	var firstErr error

@@ -25,6 +25,27 @@ tabelas `.bin` de `Server/Bin/Data` e atende:
   `accounts`, mais as rotas de contagem de personagens, lista de servidores e
   reset de flag. É o que o launcher chama antes de conectar.
 
+### Console de administração (porta 5555)
+
+Fica **desligado** sem token. Para abrir:
+
+```bash
+AIKA_CONSOLE_TOKEN=um-segredo-longo go run ./cmd/aikaserver -ini ../Server/Bin/AikaServer.ini
+```
+
+O token vem do ambiente, não do `.ini`, para não ser copiado junto com o
+arquivo de configuração. A porta escuta em `127.0.0.1:5555`; mudar isso é no
+`ConsoleAddr` do config. Uma linha por comando, e a primeira linha tem de ser o
+`AUTH`:
+
+```bash
+printf 'AUTH um-segredo-longo\n/who\n/addgold Alfa 1000\nquit\n' | nc 127.0.0.1 5555
+```
+
+Na origem essa porta aceitava qualquer conexão **sem autenticação nenhuma** e
+executava o que chegasse com poder de Admin; a seção do console, no fim deste
+arquivo, detalha isso.
+
 ## Regras do porte
 
 Valem para todo arquivo novo. Existem porque o original falhava justamente
@@ -81,7 +102,8 @@ de evidências.
 | 10p | Correio: conferir (`$3F16`), enviar (`$3F15`), lista (`$3F17`), abrir/apagar (`$3F18`), retirar anexo (`$3F1A`), não lidas (`$3F1B`) | `MailFunctions.pas`, `CharacterMail.pas` | **pronto** (caixa no MySQL; ver abaixo) |
 | 10q | Leilão: registrar (`$3F0B`), comprar (`$3F0C`), lista (`$3F0D`), cancelar (`$3F10`), minhas ofertas (`$3F11`) e vencimento | `AuctionFunctions.pas`, `PacketHandlers.pas` | **pronto** (ofertas no MySQL; entrega pelo correio) |
 | 10r | Dungeon: pedir entrada (`$334`), saguão (`$145`), confirmar (`$355`), instância por grupo, IA do mob, exp, drop e saída | `Dungeon.pas`, `Player.pas` (`CreateDungeonInstance`), `ServerSocket.pas` (`InitDungeons`) | **pronto** (sem raid; ver abaixo) |
-| 10s | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10s | Console 5555: socket de comando com autenticação, e os comandos de GM pelo sussurro | `ConsoleSocket.pas`, `CommandHandlers.pas` | **pronto** (ver abaixo) |
+| 10t | Nação, eventos, ranked, armazém, baú de guilda, pet, pran, cerco, NPC/loja | `Nation/`, `Events/`, `Rankeds/`, `PET.pas`, `NPC.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -994,3 +1016,105 @@ arquivos mudarem.
 Fora do porte, por ora: raid na dungeon (`PlayersParty2..4` do `$145`), skill de
 mob de dungeon e os NPCs de dentro (`NPCS: Array [2600..2609]`, nunca
 preenchido na origem).
+
+### Console 5555 (`ConsoleSocket.pas`, `CommandHandlers.pas`)
+
+**A porta 5555 era uma porta dos fundos sem senha.** `HandleClient` lê a linha,
+procura um Admin online no vetor de conexões, e executa o comando **como esse
+Admin** (`ConsoleSocket.pas:159-186`). Não há autenticação em lugar nenhum: nem
+senha, nem token, nem lista de endereços. O endereço vinha do `.ini` e aceitava
+`0.0.0.0`. Quem alcançasse a porta tinha o servidor: `/additem`, `/addgold`,
+`/setrank`, `/dc`.
+
+No porte o console **não sobe sem token** (`AIKA_CONSOLE_TOKEN`), e sem token
+ele diz por que no log em vez de abrir a porta. O endereço padrão é
+`127.0.0.1:5555`. A primeira linha da conexão tem de ser `AUTH <token>`,
+comparada em tempo constante, e o resto só é aceito depois disso.
+
+**O comando rodava como um Admin sorteado.** Duas consequências: sem Admin
+online nada funcionava (`"Nenhum Admin online para processar"`), e com Admin
+online um comando sem nome de jogador agia **sobre esse Admin** — `/addgold
+1000000` pelo console dava o ouro a ele. No porte o console roda como o próprio
+servidor e os comandos que precisam de alvo exigem o nome do jogador.
+
+**`ProcessCommands` não conferia permissão nenhuma.** A checagem
+`AccountType >= GameMaster` vive em quem chama (`PacketHandlers.pas:1361`, o
+caminho do sussurro); o console chamava sem nada. No porte a permissão é do
+comando: `/setrank` exige Admin, o resto GameMaster, `/who` Moderador.
+
+**Um `recv` só, sem enquadramento.** `recv(ClientSock, Buffer, 256, 0)` e o que
+vier é o comando inteiro; um comando partido em dois segmentos TCP era truncado
+e executado pela metade. Depois a conexão era fechada: um comando por conexão.
+No porte o enquadramento é por linha e a conexão aceita vários comandos.
+
+**Respondia `OK` sempre.** `send(ClientSock, 'OK'#0, 3, 0)` roda depois de
+`ProcessCommands`, incondicionalmente: comando inexistente, comando que falhou
+e comando que funcionou davam a mesma resposta ao painel. No porte a resposta é
+o resultado do comando.
+
+**Linha acima de 200 bytes era descartada em silêncio** (`if Received > 200 then
+Exit`), sem resposta: o painel ficava sem saber.
+
+**`HandleClient` rodava dentro do laço de `accept`**, então um cliente parado
+travava a porta inteira. E quando o `accept` falhava, `Sleep(10); Continue` para
+sempre — sem log, sem recuperação, laço ocupado.
+
+**Uma exceção num comando matava a thread do console.** `HandleClient` tem
+`try...finally` só para fechar o socket, e `Execute` não tem nada: a exceção
+sobe e encerra a thread. E as exceções são fáceis de provocar, porque
+`ProcessCommands` indexa a lista de parâmetros sem conferir a contagem:
+
+| Comando sem parâmetro | O que fazia |
+|---|---|
+| `/dc` | `Disconnect(Player, CMD[0])` numa lista vazia |
+| `/setdntype` | `SetDnType(CMD[0])` idem |
+| `/addeff` | `Data[0].ToInteger()` sem `try` |
+| `/dmg` | pior: `try Dano := Data[0].ToInt64 finally RemoveHP(Dano)` — `finally`, não `except`, então o dano era aplicado com valor zero **e** a exceção subia |
+
+Então `/dmg` sem argumento, enviado à porta 5555, derrubava o console e o painel
+parava de responder até o servidor reiniciar. No porte cada parâmetro passa por
+um acessador que devolve vazio fora da faixa, e o goroutine da conexão tem
+`recover`.
+
+**`CMD` (`TStringList`) nunca é liberado.** É criado no começo de
+`ProcessCommands` e nenhum dos caminhos — nem os `Exit` adiantados, nem o fim da
+rotina — chama `Free`. Um vazamento por comando executado.
+
+**O despacho tinha três partes que não conversavam:** uma corrente de
+`if Command = '...'` com `Exit`, um `case AnsiIndexStr(Command, [...])` com 31
+nomes, e `addtitle`/`updatetitle`/`removetitle` nas duas. A corrente roda
+primeiro e sai, então **os casos 19, 20 e 21 do `case` nunca executavam**. E
+`'npc'` está na lista de nomes (índice 30) sem ramo correspondente: caía no
+`else`, "Comando inválido.".
+
+**`/setrank` não conferia a faixa nem exigia nome.**
+`TAccountType(Rank)` com `Rank` acima de 5 dá um enum fora da faixa, e a
+comparação `>= GameMaster` passa a valer para qualquer valor alto; sem nome, o
+comando se aplicava a quem digitou, então qualquer GM se promovia a Admin. No
+porte o nome é obrigatório, o valor é conferido, e o comando exige Admin.
+
+**`/addlevel` lia o nível de quem digitou, não do alvo.**
+
+```pascal
+LevelExp := ExpList[Player.Character.Base.Level + (Level - 1)] + 1;
+```
+
+`Player` é quem digitou, mesmo quando o alvo é outro jogador. Pior: `Level` é
+WORD, então `/addlevel 0` dá `65535` no índice, cai no `except`, e o *fallback* é
+`LevelExp := High(ExpList)` — o último **índice** (151), não o último valor. Em
+seguida `AddExp := LevelExp - UInt64(Exp)` dá a volta no UInt64 e o personagem
+recebe ~1,8×10¹⁹ de experiência.
+
+**`/addgold` somava sem teto.** `Inc(Gold, Value)` com `Value` vindo de
+`Data[0].ToInt64`: dois comandos com o máximo do Int64 davam a volta e deixavam
+o ouro negativo. O porte tem teto.
+
+**`/dmg` só sabia bater em quem digitou** — não aceitava nome de alvo. **`/move`
+não validava a coordenada.** **`/addmob` tem corpo vazio** e **`/equip`
+responde "Ainda não setado."**: comandos que existem e não fazem nada.
+
+Comandos portados: `additem`, `addgold`, `addexp`, `addlevel`, `addbuff`,
+`removebuff`, `move`, `dc`, `dmg`, `setrank`, mais `who` e `help`, que não
+existem na origem e o console precisa (o nome do jogador agora é obrigatório).
+Os outros 24 nomes da origem estão no registro e respondem dizendo de que
+sistema dependem, em vez de não fazer nada em silêncio.

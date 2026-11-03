@@ -126,6 +126,10 @@ type Server struct {
 	ChannelAddr string
 	TokenAddr   string
 	ConsoleAddr string
+	// ConsoleToken e o segredo que o console exige na primeira linha. Vazio
+	// deixa o console desligado: a origem abria a porta sem autenticacao
+	// nenhuma e executava com poder de Admin o que chegasse nela.
+	ConsoleToken string
 }
 
 // Portas padrao, iguais as do Delphi (ver ALTERACOES.md).
@@ -177,6 +181,9 @@ func FromINI(ini *INI) Server {
 		ChannelAddr: fmt.Sprintf(":%d", DefaultChannelPort),
 		TokenAddr:   fmt.Sprintf(":%d", DefaultTokenPort),
 		ConsoleAddr: fmt.Sprintf("127.0.0.1:%d", DefaultConsolePort),
+		// O token nao fica no .ini de proposito: vem do ambiente, para nao
+		// ser copiado junto com o arquivo de configuracao.
+		ConsoleToken: os.Getenv("AIKA_CONSOLE_TOKEN"),
 	}
 }
 
