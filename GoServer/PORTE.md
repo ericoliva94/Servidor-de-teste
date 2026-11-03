@@ -75,7 +75,8 @@ de evidências.
 | 10j | Mobs: carga dos dois CSV, spawn (`$35E`), visibilidade, golpe, morte, experiência (`$108`) e respawn | `ServerSocket.pas`, `MOB.pas`, `Player.pas` | **pronto** (sem IA de movimento nem ataque do mob) |
 | 10k | IA de mob: patrulha, perseguição e golpe no jogador | `MOB.pas` (`MobHandler`, `MobMoviment`, `AttackPlayer`) | **pronto** (sem skill de mob nem guarda) |
 | 10l | Grupo: convidar (`$322`), aceitar (`$323`), sair/expulsar (`$324`), desfazer (`$325`), liderança (`$34B`), pedir entrada (`$38F`), estado (`$326`), posição (`$11D`) e conversa de grupo | `PartyData.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (sem raid) |
-| 10m | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10m | Skills: aprender (`$31C`), lançar (`$320`), zerar (`$32A`), cancelar (`$327`), listas (`$106`/`$107`), recarga, custo de MP e buff | `SkillFunctions.pas`, `PacketHandlers.pas`, `BaseMob.pas` | **pronto** (motor genérico; os casos especiais por skill ficam para a fase seguinte) |
+| 10n | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -607,6 +608,54 @@ mensagem.
 
 **Conversa de grupo** — passou de "não disponível" para funcionando; guilda,
 aliança, nação e megafone seguem recusados com aviso.
+
+**`LearnSkill`, os pontos de atributo apagados** — o ramo
+`if (SkillPoint = 1) then CurrentScore.Status := 0` zerava os pontos de
+**atributo** junto com o último ponto de habilidade. Aprender uma skill com
+exatamente 1 ponto sobrando apagava a reserva de status inteira do personagem.
+É o único caso em que o jogador perde dado por usar o jogo normalmente, e não
+foi portado.
+
+**`skillfn.Data`** — `SkillData[Packet.SkillIndex]` com o índice vindo do
+cliente como `DWORD` num `ARRAY [0..11998]`, lido **cinco vezes antes de
+qualquer validação**: um índice qualquer lia memória fora da tabela, e o que
+viesse de lixo decidia nível mínimo, pontos, custo e classe.
+
+**`skillfn.IncLevel`, nível sem teto** — `inc(Skills.Basics[i].Level)` não
+tinha limite. Passando de 15, `Index + Level` entrava no **grupo de skill
+seguinte** da tabela, e o jogador usava skill de outra árvore de graça.
+
+**`game.useSkill`, repasse antes da validação** — `UseSkill` chamava
+`Player.Base.SendToVisible(Packet, ...)` na **primeira linha**: skill
+inexistente, de outra classe, sem MP ou em recarga ainda aparecia na tela de
+todo mundo. Agora o repasse acontece depois de a skill ser aceita.
+
+**`game.useSkill`, skill não aprendida** — a origem não conferia se o jogador
+tinha a skill: bastava mandar o índice no `$320` e ela saía. Só o nível mínimo
+do personagem era testado, e a classe era checada apenas em `LearnSkill`.
+
+**`game.sendSkillLevels`** — em `SendPlayerSkillsLevel` o `SendPacket` vinha
+**antes** de o vetor `Skills` ser preenchido, e o `Move` que o preenchia
+escrevia num registro local já enviado e a ponto de sair de escopo. O cliente
+recebia a máscara sempre zerada: **os níveis de skill nunca chegavam**.
+
+**`skillfn.LevelMask`** — `GetSkillLevel` devolvia `2^(Level+1) - 2` e o
+tamanho do `Move` (2 ou 4 bytes) num slot de 2 bytes. Com nível 16 ou mais o
+`Move` de 4 bytes escrevia por cima da máscara da skill vizinha. Agora o nível
+é limitado ao teto do grupo antes da conta.
+
+**`store.Skills.ByCharacter`** — o slot vinha do banco e indexava
+`Skills.Basics[ItemSlot]` (6 posições) e `Skills.Others[ItemSlot]` (40) **sem
+checagem de faixa**: um slot de 40 ou mais escrevia depois do fim de `Others`,
+dentro do registro do personagem — o mesmo registro que vai no `$925` e é
+gravado de volta.
+
+**`PredadorInvBarReset`, código morto** — monta o pacote `$12C` inteiro,
+calcula o cooldown novo e **nunca chama `SendPacket`**. Não foi portado.
+
+**Custo de MP descontado depois da validação** — na origem o MP saía dentro de
+`AttackTarget`, depois de vários `Exit` possíveis; aqui o desconto é o último
+passo antes de a skill sair, então nenhuma recusa cobra mana.
 
 **`gamedata.Tables.BuffSeconds`** — `SkillData[Index].Duration` com
 `SkillData: ARRAY [0..11998]` acessado sem checagem: índice de buff acima da

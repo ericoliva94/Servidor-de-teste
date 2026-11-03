@@ -52,6 +52,7 @@ func lutador(nome string, x, y float32) *Session {
 	s.Avatar.Level = 50
 	s.Avatar.Recalc(stats.Bonus{})
 	s.Avatar.CurHP = s.Avatar.MaxHP
+	s.Avatar.CurMP = s.Avatar.MaxMP
 	// Arma no slot 6, como a origem exige.
 	s.Equip.Slots[WeaponSlot] = model.Item{Index: 1000, Min: 100, Max: 100, Refi: 16}
 	return s

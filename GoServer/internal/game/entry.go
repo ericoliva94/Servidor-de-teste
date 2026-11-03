@@ -198,6 +198,7 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	// 2 lia os itens de Characters[1], que esta vazio, e o personagem do slot
 	// 2 entrava sem equipamento.
 	equip, inventario := h.loadItems(ctx, s, src.ID)
+	skills := h.loadSkills(ctx, s, src.ID)
 
 	var pkt packets.SendToWorldPacket
 	pkt.Header.Index = WorldIndex
@@ -239,6 +240,7 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	s.SelectedSlot = slot
 	s.Equip = equip
 	s.Inventory = inventario
+	s.Skills = skills
 	s.Avatar = AvatarFromCharacter(src, uint16(s.Account.Nation))
 	s.Avatar.SetEquip(equip)
 	s.Avatar.ApplyEquipBonus(h.Data, equip)
@@ -264,6 +266,9 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	ch.CurrentScore.Infamia = src.Infamia
 	ch.CurrentScore.SkillPoint = src.SkillPoint
 	ch.ActiveTitle = src.ActiveTitle
+	// O $925 leva a mascara de niveis em SkillList; a arvore em si fica na
+	// sessao e vai pelos pacotes $106 e $107.
+	h.fillSkillMask(s, ch.SkillList[:])
 
 	s.Status = Playing
 	s.SubStatus = Playing
@@ -284,6 +289,7 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	// Com o jogador em jogo, ele e os vizinhos passam a se ver. Isto so pode
 	// acontecer depois do $925: antes dele o cliente nao tem mundo desenhado
 	// e descartaria os spawns.
+	h.sendSkillList(c, s)
 	h.refreshVisible(s)
 	h.refreshVisibleMobs(s)
 	return nil
@@ -346,4 +352,26 @@ func (h *Handler) loadItems(ctx context.Context, s *Session, charID uint32) (equ
 		h.log().Warn("itens", "personagem", charID, "aviso", a)
 	}
 	return equip, inv
+}
+
+// loadSkills le a arvore de skills do personagem.
+//
+// Falha de leitura nao impede a entrada: o jogador entra sem skill e o erro
+// vai para o log, como a origem fazia por acidente (o try/except em volta da
+// consulta engolia a excecao) mas sem registrar qual personagem ficou sem.
+func (h *Handler) loadSkills(ctx context.Context, s *Session, charID uint32) model.SkillsList {
+	var out model.SkillsList
+	if h.SkillDB == nil {
+		return out
+	}
+	list, avisos, err := h.SkillDB.ByCharacter(ctx, charID)
+	if err != nil {
+		h.log().Error("carregar skills",
+			"personagem", charID, "usuario", s.Username, "erro", err)
+		return out
+	}
+	for _, a := range avisos {
+		h.log().Warn("skills", "personagem", charID, "aviso", a)
+	}
+	return list
 }

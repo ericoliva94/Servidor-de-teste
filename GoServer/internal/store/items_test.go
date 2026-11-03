@@ -157,3 +157,28 @@ func TestTamanhosDosVetores(t *testing.T) {
 		t.Errorf("Inventory tem %d slots, TCharacter diz 64", InventorySlots)
 	}
 }
+
+// ---- skills
+
+func TestClampSkillLevel(t *testing.T) {
+	casos := map[int64]uint16{
+		0: 0, 5: 5, 15: 15,
+		16: MaxSkillLevelDB, 100: MaxSkillLevelDB, 1 << 40: MaxSkillLevelDB,
+		-1: 0, -100: 0,
+	}
+	for in, quer := range casos {
+		if got := clampSkillLevel(in); got != quer {
+			t.Errorf("clampSkillLevel(%d) = %d, queria %d", in, got, quer)
+		}
+	}
+}
+
+// Os tamanhos tem de casar com os vetores de PlayerData.pas.
+func TestTamanhosDeSkill(t *testing.T) {
+	if BasicSkillSlots != 6 {
+		t.Errorf("Basics tem %d slots, PlayerData.pas diz 6", BasicSkillSlots)
+	}
+	if OtherSkillSlots != 40 {
+		t.Errorf("Others tem %d slots, PlayerData.pas diz 40", OtherSkillSlots)
+	}
+}

@@ -17,6 +17,7 @@ import (
 	"aika/internal/netsrv"
 	"aika/internal/packets"
 	"aika/internal/protocol"
+	"aika/internal/skillfn"
 	"aika/internal/store"
 )
 
@@ -42,6 +43,12 @@ type Characters interface {
 	ByAccount(ctx context.Context, accountID uint32) ([store.MaxCharacterSlots]store.Character, []string, error)
 }
 
+// SkillStore le e grava a arvore de skills.
+type SkillStore interface {
+	ByCharacter(ctx context.Context, charID uint32) (model.SkillsList, []string, error)
+	Save(ctx context.Context, charID uint32, list model.SkillsList) error
+}
+
 // ItemSource busca e grava os itens de um personagem e de uma conta.
 type ItemSource interface {
 	Equip(ctx context.Context, charID uint32) (store.ItemSet, error)
@@ -58,6 +65,7 @@ type Handler struct {
 	Accounts auth.Accounts
 	Chars    Characters
 	Items    ItemSource
+	SkillDB  SkillStore
 	Numerics NumericStore
 	// Chan e o registro de quem esta conectado a este canal.
 	Chan *Channel
@@ -83,6 +91,9 @@ type Handler struct {
 	// Data sao as tabelas .bin que as contas de item precisam; nil zera os
 	// bonus em vez de quebrar.
 	Data itemfn.Tabelas
+	// Skills e a tabela SkillData; nil recusa toda skill em vez de ler
+	// memoria fora do vetor como a origem fazia.
+	SkillTable skillfn.Tabela
 	// Rand e a fonte de sorteio do combate; nil usa a global.
 	Rand combat.Rand
 	Now  func() time.Time
@@ -143,6 +154,14 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.giveLeaderParty(ctx, c, s, p)
 	case CodeAddSelfParty:
 		return h.addSelfParty(ctx, c, s, p)
+	case CodeLearnSkill:
+		return h.learnSkill(ctx, c, s, p)
+	case CodeUseSkill:
+		return h.useSkill(ctx, c, s, p)
+	case CodeResetSkills:
+		return h.resetSkills(ctx, c, s, p)
+	case CodeCancelSkill:
+		return h.cancelSkill(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta
@@ -387,7 +406,10 @@ func (h *Handler) log() *slog.Logger {
 // chegava, tudo que o jogador tinha movido na sessao era perdido. Aqui a
 // gravacao fica no mesmo ponto unico de saida que tira o jogador do canal.
 func (h *Handler) saveItems(s *Session) {
-	if h.Items == nil || s.SelectedSlot < 0 || s.SelectedSlot >= store.MaxCharacterSlots {
+	if s.SelectedSlot < 0 || s.SelectedSlot >= store.MaxCharacterSlots {
+		return
+	}
+	if h.Items == nil && h.SkillDB == nil {
 		return
 	}
 	charID := s.Characters[s.SelectedSlot].ID
@@ -399,15 +421,21 @@ func (h *Handler) saveItems(s *Session) {
 	ctx, cancel := context.WithTimeout(context.Background(), saveTimeout)
 	defer cancel()
 
-	if len(s.Equip.Slots) > 0 {
+	if h.Items != nil && len(s.Equip.Slots) > 0 {
 		if err := h.Items.SaveEquip(ctx, charID, s.Equip); err != nil {
 			h.log().Error("gravar equipamento",
 				"usuario", s.Username, "personagem", charID, "erro", err)
 		}
 	}
-	if len(s.Inventory.Slots) > 0 {
+	if h.Items != nil && len(s.Inventory.Slots) > 0 {
 		if err := h.Items.SaveInventory(ctx, charID, s.Inventory); err != nil {
 			h.log().Error("gravar inventario",
+				"usuario", s.Username, "personagem", charID, "erro", err)
+		}
+	}
+	if h.SkillDB != nil {
+		if err := h.SkillDB.Save(ctx, charID, s.Skills); err != nil {
+			h.log().Error("gravar skills",
 				"usuario", s.Username, "personagem", charID, "erro", err)
 		}
 	}

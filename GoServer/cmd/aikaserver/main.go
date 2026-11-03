@@ -25,6 +25,7 @@ import (
 	"aika/internal/mobdata"
 	"aika/internal/model"
 	"aika/internal/netsrv"
+	"aika/internal/skillfn"
 	"aika/internal/store"
 	"aika/internal/tokensrv"
 )
@@ -78,6 +79,7 @@ func run() error {
 		accounts auth.Accounts
 		chars    game.Characters
 		items    game.ItemSource
+		skillDB  game.SkillStore
 		numerics game.NumericStore
 		tokens   tokensrv.Store
 	)
@@ -87,6 +89,7 @@ func run() error {
 		chars = noChars{}
 		numerics = noChars{}
 		items = noItems{}
+		skillDB = noSkills{}
 	} else {
 		db, err := store.Open(ctx, store.Config{
 			Server:   cfg.MySQLServer,
@@ -109,6 +112,7 @@ func run() error {
 		chars = cs
 		numerics = cs
 		items = store.Items{DB: db}
+		skillDB = store.Skills{DB: db}
 	}
 
 	loginSrv := netsrv.New(netsrv.Config{
@@ -146,8 +150,10 @@ func run() error {
 		Accounts:       accounts,
 		Chars:          chars,
 		Items:          items,
+		SkillDB:        skillDB,
+		SkillTable:     tables,
 		Numerics:       numerics,
-		Durations:      tables,
+		Durations:      skillfn.BuffSeconds{T: tables},
 		Data:           tables,
 		WatchDistance:  cfg.DistanceToWatch,
 		ForgetDistance: cfg.DistanceToForget,
@@ -335,6 +341,15 @@ func (noItems) Cash(context.Context, uint32) (store.ItemSet, error) {
 func (noItems) SaveEquip(context.Context, uint32, store.ItemSet) error { return nil }
 
 func (noItems) SaveInventory(context.Context, uint32, store.ItemSet) error { return nil }
+
+// noSkills devolve arvore vazia. Usado com -no-db.
+type noSkills struct{}
+
+func (noSkills) ByCharacter(context.Context, uint32) (model.SkillsList, []string, error) {
+	return model.SkillsList{}, nil, nil
+}
+
+func (noSkills) Save(context.Context, uint32, model.SkillsList) error { return nil }
 
 // noAccounts recusa todo login. Usado com -no-db.
 type noAccounts struct{}

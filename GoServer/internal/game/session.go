@@ -99,6 +99,11 @@ type Session struct {
 	Equip     store.ItemSet
 	Inventory store.ItemSet
 
+	// Skills e a arvore de habilidades do personagem.
+	Skills model.SkillsList
+	// UsingSkill e a skill em lancamento, zero quando nao ha nenhuma.
+	UsingSkill uint16
+
 	// Base reune as listas de visiveis, buffs e recargas da entidade.
 	Base EntityState
 }
