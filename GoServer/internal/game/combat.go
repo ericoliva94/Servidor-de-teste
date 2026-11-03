@@ -86,6 +86,15 @@ func (h *Handler) attack(ctx context.Context, c *netsrv.Conn, s *Session, p prot
 	}
 	s.LastAttack = agora
 
+	// Dentro de uma dungeon o alvo e um mob da instancia, cujo id vem do
+	// MobsPosition e cai na faixa reservada a NPC (2048..3047), nao na dos
+	// mobs do mundo. A origem tratava esse caso primeiro e, por nao ter um
+	// Exit no fim do bloco, caia depois no ramo de jogador e batia duas vezes
+	// (PacketHandlers.pas:5753).
+	if h.attackDungeonMob(ctx, c, s, pkt.Index) {
+		return nil
+	}
+
 	// Mob e jogador vem no mesmo campo Index, separados pela faixa do id.
 	if IsMobTarget(pkt.Index) {
 		return h.hitMob(c, s, pkt.Index)

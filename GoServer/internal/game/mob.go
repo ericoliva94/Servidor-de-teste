@@ -342,6 +342,16 @@ func (h *Handler) sendMobRemove(para *Session, mobID uint16) {
 // origem rodava esse procedimento por mob, varrendo o vetor inteiro de 22.500
 // posicoes; aqui a varredura e por jogador sobre os mobs que existem.
 func (h *Handler) refreshVisibleMobs(s *Session) {
+	// Dentro de uma dungeon os mobs sao os da instancia. A origem nao fazia
+	// essa separacao: o laco de visibilidade do mundo seguia rodando para
+	// quem estava dentro, e o laco da dungeon tambem, entao o jogador recebia
+	// spawn dos mobs do mundo na posicao da dungeon.
+	if h.Dungeons != nil {
+		if _, dentro := h.Dungeons.Of(s.CharID()); dentro {
+			h.SendDungeonMobs(s)
+			return
+		}
+	}
 	if h.Mobs == nil || h.Chan == nil {
 		return
 	}

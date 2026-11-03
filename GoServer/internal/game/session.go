@@ -95,6 +95,19 @@ type Session struct {
 	// CanSendMailTo e o destinatario que passou pela conferencia do $3F16.
 	CanSendMailTo string
 
+	// DungeonInstance e a instancia em que o jogador esta, zero fora de
+	// dungeon. A origem tinha cinco campos para isso (DungeonLobbyIndex,
+	// DungeonLobbyDificult, DungeonID, DungeonIDDificult, DungeonInstanceID)
+	// mais dois booleanos (InDungeon, IsInsideDungeon), zerados em sete
+	// lugares diferentes e cada um zerando um subconjunto diferente.
+	DungeonInstance uint32
+	// DungeonID e DungeonDificult sao a dungeon em que ele esta.
+	DungeonID       uint32
+	DungeonDificult uint32
+	// ReturnPosition e onde ele estava antes de entrar. A origem nao
+	// guardava: quem saia era jogado num ponto fixo (3399, 564).
+	ReturnPosition model.Position
+
 	// Avatar e o personagem escolhido, do jeito que os outros clientes o
 	// veem. So tem conteudo a partir do Playing.
 	Avatar Avatar

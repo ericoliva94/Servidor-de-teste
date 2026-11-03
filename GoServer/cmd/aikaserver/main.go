@@ -21,6 +21,8 @@ import (
 	"aika/internal/auth"
 	"aika/internal/config"
 	"aika/internal/dropdata"
+	"aika/internal/dungeon"
+	"aika/internal/dungeondata"
 	"aika/internal/game"
 	"aika/internal/gamedata"
 	"aika/internal/guild"
@@ -165,6 +167,31 @@ func run() error {
 		"especies", len(mobs.Species), "pontos", mobs.SpawnCount(),
 		"ativos", mundoMobs.Count())
 
+	// As dungeons vem do Dungeons.csv mais um par de CSV por dificuldade.
+	// A origem tinha a chamada de carga comentada (ServerSocket.pas:493)
+	// porque o laco de carga escrevia duas fichas de dungeon fora de um vetor
+	// de um elemento; aqui a carga roda e ausencia e aviso, nao erro.
+	dungeons, err := dungeondata.Load(*dataDir)
+	if err != nil {
+		log.Warn("dungeons nao carregadas: o servidor sobe sem dungeon",
+			"erro", err)
+	} else {
+		for _, a := range dungeons.Avisos {
+			log.Warn("tabelas de dungeon", "aviso", a)
+		}
+		total := 0
+		for id := range dungeons.Defs {
+			for dif := uint32(0); dif < dungeondata.Difficulties; dif++ {
+				if d, ok := dungeons.Get(id, dif); ok {
+					total += d.SpawnCount()
+				}
+			}
+		}
+		log.Info("dungeons carregadas",
+			"dungeons", len(dungeons.Defs),
+			"dificuldades", dungeondata.Difficulties, "pontos", total)
+	}
+
 	// As guildas sobem do banco antes das portas: um jogador entrando antes
 	// disso apareceria sem guilda.
 	registroGuildas := guild.NewRegistry()
@@ -196,6 +223,8 @@ func run() error {
 		Parties:        game.NewPartyRegistry(),
 		Drops:          drops,
 		MapObjs:        game.NewMapObjects(),
+		Dungeons:       dungeon.NewRegistry(),
+		DungeonLobbies: dungeon.NewLobbies(),
 		DropRateBonus:  cfg.DropRateBonus,
 		Exp:            tables,
 		ExpMultiplier:  cfg.ExpMultiplier,
@@ -271,7 +300,12 @@ func run() error {
 	go respawnLoop(ctx, canalHandler, log)
 	go mobAILoop(ctx, canalHandler, log)
 	go mapObjectLoop(ctx, canalHandler, log)
+	if dungeons != nil {
+		canalHandler.DungeonTable = dungeons
+	}
+
 	go auctionLoop(ctx, canalHandler, log)
+	go dungeonLoop(ctx, canalHandler, log)
 
 	tarefas := 2
 	errc := make(chan error, 3)
@@ -369,6 +403,30 @@ func mapObjectLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
 
 // auctionInterval e o passo com que o servidor confere as ofertas vencidas.
 const auctionInterval = time.Minute
+
+// dungeonInterval e o passo da IA de dungeon. A origem usava
+// "TDungeonMainThread.Create(1000, ...)", um segundo por instancia.
+const dungeonInterval = time.Second
+
+// dungeonLoop roda a IA dos mobs de dungeon e fecha o que venceu.
+//
+// A origem abria uma TThread por instancia (TDungeonMainThread), que lia o
+// ponteiro do grupo uma vez e seguia usando esse ponteiro mesmo depois de o
+// fechamento ter posto Party := nil e de o grupo ter sido desfeito.
+func dungeonLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
+	t := time.NewTicker(dungeonInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if n := h.DungeonTick(ctx); n > 0 {
+				log.Info("instancias de dungeon fechadas", "quantidade", n)
+			}
+		}
+	}
+}
 
 // auctionLoop devolve ao vendedor os itens das ofertas que venceram.
 //

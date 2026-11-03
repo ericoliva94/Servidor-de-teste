@@ -80,7 +80,8 @@ de evidências.
 | 10o | Guilda: criar (`$341`), convite (`$F7B`/`$67D`/`$F7E`), expulsar (`$F2D`), sair (`$F1C`), rank (`$F1D`), mestre (`$619`), avisos (`$F20`), site (`$F21`), permissões (`$F22`), info (`$965`), membros (`$97F`) e conversa de guilda | `GuildData.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (sem baú, aliança, skill de guilda nem cerco) |
 | 10p | Correio: conferir (`$3F16`), enviar (`$3F15`), lista (`$3F17`), abrir/apagar (`$3F18`), retirar anexo (`$3F1A`), não lidas (`$3F1B`) | `MailFunctions.pas`, `CharacterMail.pas` | **pronto** (caixa no MySQL; ver abaixo) |
 | 10q | Leilão: registrar (`$3F0B`), comprar (`$3F0C`), lista (`$3F0D`), cancelar (`$3F10`), minhas ofertas (`$3F11`) e vencimento | `AuctionFunctions.pas`, `PacketHandlers.pas` | **pronto** (ofertas no MySQL; entrega pelo correio) |
-| 10r | Console 5555 | `ConsoleSocket.pas` | a fazer |
+| 10r | Dungeon: pedir entrada (`$334`), saguão (`$145`), confirmar (`$355`), instância por grupo, IA do mob, exp, drop e saída | `Dungeon.pas`, `Player.pas` (`CreateDungeonInstance`), `ServerSocket.pas` (`InitDungeons`) | **pronto** (sem raid; ver abaixo) |
+| 10s | Console 5555 | `ConsoleSocket.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -846,3 +847,150 @@ continua assim; o teste `TestComissao` registra a tabela de valores.
 **Item com `TypeTrade` de não comercializável** era aceito no leilão: a origem
 confere o `TypeTrade` na troca entre jogadores, mas não no registro da oferta.
 Agora é recusado.
+
+### Dungeon (`Dungeon.pas`, `InitDungeons`, `CreateDungeonInstance`)
+
+**A dungeon não funciona na origem, e está desligada de propósito.** A chamada
+de carga está comentada — `//Self.InitDungeons;`, `ServerSocket.pas:493` — e
+com razão: o laço de carga é `for i := 0 to 2 do` sobre vetores declarados
+`Array [0 .. 0] of TDungeon` (`ServerSocket.pas:63-67`). Cada `TDungeon` tem 45
+espécies de até 50 pontos, e cada ponto carrega um `TBaseMob` inteiro, então a
+carga grava **duas fichas de dungeon inteiras**, megabytes, fora do vetor. Os
+campos que vêm logo depois no mesmo objeto são `Parties: ARRAY [1..30]`,
+`Devires`, `DevirNpc`, `DevirGuards`, `DevirStones`, `SecureAreas`,
+`ReliqEffect`, `CastleObjects`, `CastleSiegeHandler` e os ponteiros de thread
+do servidor. A última dungeon carregada (Kinary) escreve além de todos eles.
+
+Com a carga desligada, todo `DGUrsula[x]` lido em jogo devolve zeros: nível
+mínimo 0, tabela de mobs vazia, e `SpawnInDungeonPosition` igual a (0, 0) — a
+posição para onde o grupo era teleportado. No porte a carga roda, as três
+dificuldades ficam num slice indexado com checagem, e o `Dungeons.csv` real
+rende 5 dungeons × 3 dificuldades e 2874 pontos de spawn.
+
+**Uma instância para o servidor inteiro.** `DungeonInstances: Array [1 .. 1]`
+(`GlobalDefs.pas:18`). O segundo grupo a entrar recebia
+`GetFreeDungeonInstance = 255` e a rotina fazia só `Exit` — **depois** de todos
+os membros já terem sido teleportados para dentro e marcados `InDungeon`
+(`Player.pas:11143-11162`). Resultado: grupo preso num mapa sem mob nenhum,
+com `DungeonInstanceID = 0`, que é índice fora do vetor `[1..1]` e era usado em
+todo acesso seguinte. No porte a instância é criada **antes** de alguém entrar,
+e cada grupo tem a sua.
+
+**O vetor de pontos estoura com os dados que acompanham o servidor.** Nas três
+dificuldades do Marauder Hold uma espécie tem **93** pontos de spawn, e
+`MobsP` é `Array [0 .. 49]`. A carga grava `MobsP[cntControl]` sem checagem
+(`ServerSocket.pas:1332`): 43 registros por cima da espécie seguinte. O porte
+recusa o excedente e avisa no log — é o que aparece ao subir o servidor.
+
+**Um jogador confirmava a entrada pelos outros.** `DungeonLobbyConfirm` credita
+a confirmação a `Packet.Header.Index`, um campo que vem do cliente
+(`PacketHandlers.pas:9699`). Mandando um `$355` com o índice de cada membro, um
+jogador sozinho enchia o vetor de confirmações e arrastava o grupo inteiro para
+dentro. No porte a confirmação é sempre de quem mandou o pacote.
+
+**O saguão não tinha prazo e as confirmações viviam no grupo.**
+`SetLength(Party.DungeonLobbyConfirm, Members.Count)` rodava a cada
+confirmação, então um membro que saísse do grupo no meio encurtava o vetor e
+descartava confirmações já dadas; e como o vetor ficava no registro do grupo,
+um saguão novo herdava as confirmações do anterior. Um membro que nunca
+respondesse deixava o grupo preso para sempre. No porte o saguão é um objeto
+próprio, com prazo de 60 s.
+
+**O nível do grupo era conferido nos jogadores errados.** No caso do NPC do
+Kinary, `for I := Low(Party.Members.ToArray) to High(...)` e
+`Players[I].Base.Character.Level` (`PacketHandlers.pas:9557`): `I` é o índice
+no vetor de membros, usado como índice de **conexão**. Conferia o nível de
+quem estivesse nas conexões 0, 1, 2…, não dos membros. Os outros quatro NPCs
+usam `for I in Party.Members`, que está certo.
+
+**A dificuldade é um DWORD do cliente.** `DGMines1[Packet.Dificult].LevelMin`
+num vetor de um elemento (`PacketHandlers.pas:9489`), e o mesmo índice volta em
+`CreateDungeonInstance` para ler a posição de entrada e a tabela de mobs
+inteira. Qualquer valor diferente de 0 lia memória alheia e seguia com ela. No
+porte a dificuldade passa por `Table.Get`, que recusa fora de 0..2.
+
+**O `$334` não exigia estar em jogo.** No `case` do despacho os vizinhos têm
+`if (Player.IsInstantiated)`; esse não (`ServerSocket.pas:3080`).
+
+**"Miss" tirava vida.** No golpe do mob de dungeon o sorteio marcava
+`TDamageType.Miss` para 2..15 e o dano era descontado do HP do mesmo jeito: o
+cliente escrevia Miss e o jogador perdia vida. `Critical` também não mudava o
+dano. No porte Miss zera e Critical aumenta, como no golpe de mob do mundo.
+
+**O golpe lia o HP de um registro e escrevia em outro.**
+`PlayerBase.PlayerCharacter.Base.CurrentScore.CurHP` para conferir, e
+`Base.Character.CurrentScore.CurHP` para descontar (`Dungeon.pas:150` e 257).
+
+**A exp do grupo era dividida uma vez por membro.**
+
+```pascal
+for i in Party.Members do
+  MobExp := (MobExp div Party.Members.Count);
+```
+
+(`BaseMob.pas:6189`) — a divisão é refeita sobre o valor já dividido. Num grupo
+de quatro: 250, 62, 15 e 3, em vez de 250 para cada. O teste
+`TestExpDoGrupoEDivididaUmaVez` fixa isso.
+
+**O drop de dungeon está todo comentado** (`BaseMob.pas:6988-7022`), então o mob
+de dungeon caía no drop do mundo indexado por `Mobs.TMobS[mob.Mobid]`, com
+`Mobid` sendo o **slot na instância** (1..450): a lista de drop de uma espécie
+do mundo escolhida pelo número do slot. E o bloco comentado, se voltasse, tinha
+`ItemTax := RandomRange(1, cnt)` (nunca sorteia o índice 0 nem o último) e
+deixava `ItemTax` **sem valor** quando a lista estava vazia.
+
+**A coroa do drop só casava com os números do Zantorian.** O
+`case DungeonDropIndex of 11, 21, 31: … 12, 22, 32: … 13, 23, 33:` aparece
+igual nos cinco blocos de `CreateDungeonInstance`, mas Marauder usa 41..93,
+Mina 101..303 e Kinary 401..603: para **quatro das cinco dungeons** nenhum caso
+casava e a lista de drop ficava zerada. São 297 espécies sem drop nenhum
+(hold 57, cabin 51, mina 57, kinary 132). No porte a coroa sai do último dígito
+do índice, que é o que o nome do arquivo quer dizer.
+
+**A thread da instância usava um ponteiro liberado.** `TDungeonMainThread.Execute`
+lê `DungeonInstances[i].Party` uma vez, antes do laço, e usa esse ponteiro pela
+vida toda; o fechamento põe `Party := nil` e o grupo pode ser desfeito. No
+porte a instância guarda os `CharIndex` dos membros e um tick único varre as
+instâncias abertas.
+
+**A queda da conexão não soltava o jogador da instância.** `Connection.Destroy`
+limpava os campos do jogador, mas não mexia em `InstanceOnline` nem tirava o
+membro da lista. Como havia um único slot de instância no servidor, uma queda
+dentro da dungeon travava a dungeon **de todo o servidor** até reiniciar.
+
+**`IsInsideDungeon` é escrito em dois lugares e lido em nenhum** — e os dois
+lugares o põem em `True` justamente quando o jogador está sendo **expulso** da
+dungeon (`Dungeon.pas:294` e 300).
+
+**O mob perseguia teleportando.** `Randomize; Rand := Random(7);
+Position := jogador.Neighbors[Rand].pos` (`Dungeon.pas:746-750`): o mob pulava
+para o lado do jogador num único passo, `Randomize` reposicionava a semente
+global a cada tick, e `Random(7)` nunca sorteia o oitavo vizinho. No porte o
+mob anda 1,5 célula por tick na direção do alvo.
+
+**Dois golpes simultâneos matavam o mesmo mob duas vezes**, com uma thread por
+jogador e `Dec(CurrentHP, Dano)` sem trava — a mesma forma do mob do mundo.
+Aqui o golpe passa por `Instance.Hit`, sob mutex, e `TestGolpeConcorrenteMataUmaVez`
+roda com `-race`.
+
+**O jogador dentro da dungeon recebia os mobs do mundo.** Os dois laços de
+visibilidade rodavam para ele: o da dungeon e o do mundo, que não sabia da
+dungeon. No porte, quem está dentro vê os mobs da instância e mais nada.
+
+**Sem `Exit` no fim do bloco de dungeon do ataque** (`PacketHandlers.pas:5753`),
+a execução caía no `if (Packet.Index <= MAX_CONNECTIONS)` logo abaixo e batia
+uma segunda vez, agora num jogador.
+
+**A coluna de nível do MobInfo de dungeon não é nível.** A origem lê
+`MobLevel := MobFileStrings[7]`, e nos arquivos reais essa coluna vale 269..1292
+(Zantorian), 298..1338 (Mina, Kinary) e 28..1320 (Marauder) — acima do nível
+máximo do jogo, que tem 152 entradas no `ExpList.bin`, e andando poucas
+unidades de uma dificuldade para a outra, como um id sequencial. O valor é lido
+como na origem e só serve para a cor do nome no cliente ("for a name collor on
+client", `MOB.pas:322`); quem precisa de nível para valer usa o `LevelMin` da
+dungeon. O teste `TestColunaSeteNaoEhNivel` registra isso e avisa se os
+arquivos mudarem.
+
+Fora do porte, por ora: raid na dungeon (`PlayersParty2..4` do `$145`), skill de
+mob de dungeon e os NPCs de dentro (`NPCS: Array [2600..2609]`, nunca
+preenchido na origem).

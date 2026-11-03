@@ -13,6 +13,7 @@ import (
 	"aika/internal/auth"
 	"aika/internal/combat"
 	"aika/internal/dropdata"
+	"aika/internal/dungeon"
 	"aika/internal/entity"
 	"aika/internal/guild"
 	"aika/internal/itemfn"
@@ -134,6 +135,12 @@ type Handler struct {
 	Drops *dropdata.Table
 	// MapObjs guarda os objetos no chao.
 	MapObjs *MapObjects
+
+	// Dungeons guarda as instancias de dungeon abertas e DungeonLobbies as
+	// telas de confirmacao. DungeonTable e a tabela carregada dos CSV.
+	Dungeons       *dungeon.Registry
+	DungeonLobbies *dungeon.Lobbies
+	DungeonTable   DungeonTable
 	// DropRateBonus e o efeito de reliquia que empurra o sorteio para as
 	// raridades maiores.
 	DropRateBonus uint16
@@ -270,6 +277,10 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.buyAuctionItem(ctx, c, s, p)
 	case CodeAuctionCancel:
 		return h.cancelAuctionOffer(ctx, c, s, p)
+	case CodeDungeonEnter:
+		return h.requestEnterDungeon(ctx, c, s, p)
+	case CodeDungeonConfirm:
+		return h.confirmDungeon(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta
@@ -392,6 +403,7 @@ func (h *Handler) OnDisconnect(c *netsrv.Conn) {
 		// mais vai ler esta sessao depois daqui.
 		h.saveItems(s)
 		h.guildOnDisconnect(s)
+		h.dungeonOnDisconnect(s)
 		h.leaveParty(s)
 		h.removeFromEveryone(s)
 	}
