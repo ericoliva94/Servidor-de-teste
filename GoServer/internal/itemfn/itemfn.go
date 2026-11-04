@@ -277,6 +277,34 @@ func ItemLevel(t Tabelas, index uint16) uint16 {
 	return it.Level
 }
 
+// ItemName devolve o nome do item sem a cauda de zeros, ou vazio.
+func ItemName(t Tabelas, index uint16) string {
+	it := t.Item(int(index))
+	if it == nil {
+		return ""
+	}
+	return cstring(it.Name[:])
+}
+
+// SellPrice devolve o preco de venda do item, usado pelas moedas de ouro.
+func SellPrice(t Tabelas, index uint16) uint32 {
+	it := t.Item(int(index))
+	if it == nil {
+		return 0
+	}
+	return it.SellPrince
+}
+
+// cstring corta a string no primeiro zero.
+func cstring(b []byte) string {
+	for i, c := range b {
+		if c == 0 {
+			return string(b[:i])
+		}
+	}
+	return string(b)
+}
+
 // ItemClass devolve a classe exigida pelo item, ou 0.
 func ItemClass(t Tabelas, index uint16) uint16 {
 	it := t.Item(int(index))

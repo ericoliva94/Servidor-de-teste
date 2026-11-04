@@ -104,7 +104,8 @@ de evidências.
 | 10r | Dungeon: pedir entrada (`$334`), saguão (`$145`), confirmar (`$355`), instância por grupo, IA do mob, exp, drop e saída | `Dungeon.pas`, `Player.pas` (`CreateDungeonInstance`), `ServerSocket.pas` (`InitDungeons`) | **pronto** (sem raid; ver abaixo) |
 | 10s | Console 5555: socket de comando com autenticação, e os comandos de GM pelo sussurro | `ConsoleSocket.pas`, `CommandHandlers.pas` | **pronto** (ver abaixo) |
 | 10t | Armazém e baú de guilda: opção de NPC (`$30F`/`$348`), armazém (`$137`/`$310`), baú (`$D58`/`$F10`/`$D18`/`$F2F`), ouro (`$F59`) e arrasto de item nos dois | `PacketHandlers.pas` (`OpenNPC`, `ChangeGold`, `MoveItem`), `GuildData.pas` (`OpenChest`), `Player.pas` (`SendStorage`) | **pronto** (ver abaixo) |
-| 10u | Nação, eventos, ranked, pet, pran, cerco, NPC/loja, central de pran | `Nation/`, `Events/`, `Rankeds/`, `PET.pas`, `NPC.pas` | a fazer |
+| 10u | Usar item: `$31D` (poções, moedas, experiência, buffs, bolsas, pedra de reparo, Símbolo da Confiança) e `$21B` (itens de buff) | `PacketHandlers.pas` (`UseItem`, `UseBuffItem`), `ItemFunctions.pas` (`TItemFunctions.UseItem`) | **pronto** (ver abaixo; baús com conteúdo chumbado, receita, portal, pran e premium a fazer) |
+| 10v | Nação, eventos, ranked, pet, pran, cerco, NPC/loja, central de pran, baús de presente, receitas | `Nation/`, `Events/`, `Rankeds/`, `PET.pas`, `NPC.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -1424,3 +1425,202 @@ No porte:
 `dungeonMobAttack` cai no ramo `Miss` quando o sorteio dá de 2 a 15: o teste
 falhava sozinho em cerca de 14% das rodadas. `handlerComDungeon` agora injeta
 `randFixo{v: 50}`, como os testes de IA de mob já faziam.
+
+### Usar item (`$31D`, `$21B`)
+
+`TItemFunctions.UseItem` tem 3.580 linhas (`ItemFunctions.pas:2017` a `5600`), e
+a maior parte delas é conteúdo de baú de presente escrito à mão — listas de
+índices de item por classe, repetidas por evento. Esta fase porta o
+**mecanismo** e os ramos cujos sistemas já existem no porte; os ramos que
+dependem de pran, pet, loja de NPC, portal, nação, receita ou inventário
+premium são recusados com aviso ao jogador e registro no log, em vez de
+sumirem em silêncio como na origem.
+
+#### Poção sem teto
+
+```pascal
+ITEM_TYPE_HP_POTION:
+  begin
+    Inc(Player.Character.Base.CurrentScore.CurHP,
+      ItemList[item.Index].UseEffect);
+    Player.Base.SendCurrentHPMP(True);
+  end;
+```
+
+`CurHP` é `DWORD` e não há comparação com `MaxHp` em nenhum dos quatro ramos
+de poção (700, 701, 800 e 29). Beber com a vida cheia empurra `CurHP` acima do
+máximo, e o personagem é **gravado** assim. O envio ao cliente limita o valor
+na hora de montar o pacote (`GetCreateMob`), então o excesso fica invisível e
+preso no registro — e some na próxima vez que o máximo é recalculado. No porte
+a cura para no máximo.
+
+#### Slot vazio aplica `ItemList[0]`
+
+O handler confere `Packet.Slot > 63` e segue sem olhar se o slot tem item.
+`item := @Inventory[Slot]` com `Index = 0` leva a `ItemList[0]`, a primeira
+linha da tabela de itens, cujo efeito é aplicado de verdade. No porte o slot
+vazio é recusado, e `ItemList[item.Index]` passa pela tabela que devolve nil
+fora da faixa.
+
+#### Item selado funciona
+
+`UseBuffItem` (`$21B`) confere `Item.IsSealed` e sai. `UseItem` (`$31D`) **não
+confere**: um item selado dá o efeito e continua selado.
+
+#### `$21B` nunca consome o item
+
+`TPacketHandlers.UseBuffItem` aplica o buff e termina. `DecreaseAmount` e
+`SendRefreshItemSlot` não aparecem na função — nem no ramo `ITEM_TYPE_BUFF`,
+nem no `ITEM_TYPE_BUFF2`, nem depois do `case`. Um item de buff dá buff
+**infinito**, quantas vezes o jogador clicar. No porte ele é consumido como
+qualquer outro uso.
+
+#### A pedra de reparo escreve fora do equipamento
+
+No ramo `ITEM_USE_TYPE`, tipo de item 708 (arma):
+
+```pascal
+if(Packet.Type1 > 16) then
+begin // reparar no invent
+  Packet.Type1 := Packet.Type1 - 16;
+  if(Packet.Type1 > 63) then Exit;
+  …
+end
+else // reparar no equip
+begin
+  if(TItemFunctions.GetItemEquipSlot(Player.Base.Character.Equip[Packet.Type1].Index) = 6) then
+  begin
+    Player.Base.Character.Equip[Packet.Type1].Min :=
+        Player.Base.Character.Equip[Packet.Type1].Max;
+```
+
+`Type1` é `DWORD` e vem do cliente. O caminho do inventário tem a guarda; o do
+equipamento **não tem nenhuma**, e `Equip` é `ARRAY [0..15]`. Um `Type1` de 16
+(que cai no ramo `else`, porque a comparação é `> 16`) lê e **escreve** uma
+posição depois do fim do vetor. O ramo 709 (armadura) tem a guarda que falta no
+708 (`if(Packet.Type1 > 15) then Exit`) — a mesma função, dois ramos, só um
+protegido.
+
+Dois defeitos menores no mesmo bloco: a mensagem `'Item reparado com sucesso.'`
+fica **fora** do `if` que confere o slot do item, então é enviada mesmo quando
+nada foi reparado; e a pedra é consumida em qualquer caso, inclusive quando o
+alvo não serve ou já está inteiro.
+
+#### `ITEM_TYPE_BAG_INV` apaga a bolsa existente
+
+```pascal
+Move(item^, Player.Character.Base.Inventory[63], sizeof(TItem));
+```
+
+Sem conferir se o slot 63 já tem bolsa. Usar um segundo "Símbolo do Viajante"
+apaga o primeiro — e com ele os 15 slots que ele habilitava, deixando os itens
+presos até alguém repor a bolsa. No porte o uso é recusado com o slot ocupado.
+
+#### `ITEM_TYPE_BAG_STORAGE`: três defeitos no mesmo laço
+
+```pascal
+BagSlot := 0;
+for i := 1 to 3 do
+begin
+  if (Player.Account.Header.Storage.Itens[80 + i].Index = 0) then
+  begin
+    BagSlot := 80 + i;
+  end;
+end;
+```
+
+- O laço vai de 1 a 3, sobre `Itens[80 + i]`: o slot **80 nunca é
+  considerado**. Das quatro expansões do armazém, a primeira é inalcançável e
+  só três funcionam.
+- Não há `Break`, então `BagSlot` fica com o **último** slot vazio, não o
+  primeiro.
+- O aviso ao cliente sai como
+  `SendRefreshItemSlot(INV_TYPE, BagSlot, …)` — tipo de slot errado
+  (`INV_TYPE` em vez de `STORAGE_TYPE`) e um slot de 81 a 83, que não existe no
+  inventário (0..63). A expansão só aparece depois de relogar.
+
+#### Buff: `SkillData[UseEffect]` sem faixa, seis vezes por ramo
+
+`ITEM_TYPE_POTION_BUFF` indexa `SkillData[ItemList[Item.Index].UseEffect]` até
+seis vezes no mesmo ramo, sempre sem conferir a faixa, e o valor vem da tabela
+de itens. `BuffExistsByIndex` e `BuffExistsInArray` fazem o mesmo com a chave
+do buff (`SkillData[i].Index`). No porte `skillfn.Data` devolve nil fora da
+faixa.
+
+A regra de conflito da origem são cinco ramos quase idênticos para as poções de
+valor de batalha (493 a 497) mais ramos soltos para 251, 285, 280/281, 298 e
+305 — cerca de 90 linhas. No porte é uma tabela (`buffConflicts`).
+
+Detalhe que importa e que uma primeira versão deste porte errou: o conflito é
+resolvido pelo **campo `Index` da linha de skill**, não pela chave do buff. A
+origem passa cada chave ativa pela tabela (`if(SkillData[i].Index = j)`), e as
+duas coisas só coincidem quando a linha tem `Index` igual à sua posição.
+`TestConflitoDeBuffUsaOIndiceDaSkillENaoAChave` trava isso.
+
+A categoria "sopa" sai do **nome do item**:
+`Copy(String(ItemList[Item.Index].Name), 0, 4) = 'Sopa'`. O índice 0 em `Copy`
+é tolerado pelo Delphi e vale 1, então a comparação é com os quatro primeiros
+caracteres. É frágil, mas é o que decide a categoria em jogo, então foi
+mantido — inclusive em `BuffExistsSopa`, que faz a mesma comparação sobre o
+nome da **skill**.
+
+A origem também não conferia a duração: um buff sem linha na tabela de duração
+entrava e nunca saía. No porte ele é recusado.
+
+#### `ITEM_TYPE_USE_TO_UP_LVL`: o mesmo estouro do `/addlevel`
+
+```pascal
+Level := ItemList[item.Index].UseEffect * 50;
+try
+  LevelExp := ExpList[Player.Character.Base.Level + (Level - 1)] + 1;
+except
+  LevelExp := High(ExpList);
+end;
+AddExp := LevelExp - UInt64(Player.Character.Base.Exp);
+```
+
+`ExpList` é `ARRAY OF UInt64` — dinâmico. O índice é 49 posições à frente do
+nível atual, sem checagem. Acima do fim da tabela cai no `except`, cujo
+fallback é `High(ExpList)`: o último **índice** (151), não o último valor. Em
+seguida `LevelExp - UInt64(Exp)` dá a volta no `UInt64` e o personagem recebe
+cerca de 1,8e19 de experiência. É letra por letra o defeito do `/addlevel 0`
+descrito na seção do console.
+
+#### `AddExpPerc`
+
+```pascal
+if (Self.Character.Base.Level = 90) then Exit;
+DifLevel := ExpList[Self.Character.Base.Level] -
+  ExpList[Self.Character.Base.Level - 1];
+```
+
+Um `if` chumbado que barra o item exatamente no nível 90 e deixa passar no 91;
+e `ExpList[Level - 1]` com nível 0 lê a posição −1 de um vetor dinâmico. No
+porte o nível vem da tabela de experiência pelos dois lados e o nível 0 é
+recusado.
+
+#### Moedas
+
+`ITEM_TYPE_USE_GOLD_COIN` e `ITEM_TYPE_USE_RICH_GOLD_COIN` chamam
+`Player.AddGold`, que faz `Inc(Gold, Value)` sem teto. No porte vale o
+`MaxGold` do porte. O valor da moeda rica é o 950.000.000 chumbado na origem —
+cuja mensagem, aliás, diz `'950.000.00'`.
+
+#### Diferenças deliberadas
+
+- **`IsGM` é só Admin.** `TPlayer.IsGM` é `Ord(AccountType) = 5`, isto é
+  `AccAdmin`. Apesar do nome, um Game Master (4) **não** ignora o requisito de
+  nível do item na origem. Mantido, porque é o que vale em jogo.
+- **Tipo de item sem porte avisa.** A origem saía por `else Exit` sem
+  mensagem: o cliente ficava esperando. Aqui o jogador recebe aviso, o log
+  registra o tipo e o nome do item, e o item **não** é consumido.
+- **A bolsa vai sem prazo.** A origem chamava `SetItemDuration` antes de mover
+  a bolsa para o slot. A duração de item ainda não está portada, então a bolsa
+  entra sem prazo.
+- **`UnsealItem` não está portado.** Ele desela o item e em seguida **usa** o
+  item (`TItemFunctions.UseItem(Player, Packet.Data)`), e manda o aviso com
+  `SendRefreshItemSlot(Packet.Data, False)` — a sobrecarga de dois argumentos,
+  cujo primeiro parâmetro é o *tipo* de slot, não o slot. Fica para a fase do
+  selo.
+- **Inventário premium (`CASH_TYPE`) recusado.** `UsePremiumItem` depende do
+  inventário premium (`slot_type` 10), que ainda não está portado.

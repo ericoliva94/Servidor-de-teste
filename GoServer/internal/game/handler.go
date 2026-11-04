@@ -304,6 +304,10 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.changeChestGold(ctx, c, s, p)
 	case CodeCloseGuildChest:
 		return h.closeGuildChest(ctx, c, s, p)
+	case CodeUseItem:
+		return h.useItem(ctx, c, s, p)
+	case CodeUseBuffItem:
+		return h.useBuffItem(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta
