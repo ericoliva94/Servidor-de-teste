@@ -47,6 +47,9 @@ type Account struct {
 	// StorageGold e a coluna storage_gold: o ouro guardado no armazem, que na
 	// origem era TStoragePlayer.Gold, um Int64 do registro da conta.
 	StorageGold int64
+	// Cash e a coluna cash: o saldo da loja premium, que na origem era
+	// TCashInventory.Cash, um Cardinal do registro da conta.
+	Cash uint32
 }
 
 // Niveis de conta, o TAccountType de PlayerData.pas:11.

@@ -199,6 +199,7 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	// 2 entrava sem equipamento.
 	equip, inventario := h.loadItems(ctx, s, src.ID)
 	armazem := h.loadStorage(ctx, s)
+	premium := h.loadCash(ctx, s)
 	skills := h.loadSkills(ctx, s, src.ID)
 
 	var pkt packets.SendToWorldPacket
@@ -245,6 +246,8 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	// O armazem e da conta, entao o ouro dele vem do registro da conta e nao
 	// do personagem. A origem lia o mesmo campo (accounts.storage_gold).
 	s.StorageGold = s.Account.StorageGold
+	s.Cash = premium
+	s.CashBalance = s.Account.Cash
 	s.Skills = skills
 	s.Avatar = AvatarFromCharacter(src, uint16(s.Account.Nation))
 	s.Avatar.SetEquip(equip)

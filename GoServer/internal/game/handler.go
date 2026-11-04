@@ -116,11 +116,17 @@ type ItemSource interface {
 	// que a origem gravava em owner_id com slot_type 3.
 	GuildChest(ctx context.Context, guildIndex uint32) (store.ItemSet, error)
 	SaveGuildChest(ctx context.Context, guildIndex uint32, set store.ItemSet) error
+	SaveCash(ctx context.Context, accountID uint32, set store.ItemSet) error
 }
 
 // StorageGoldStore grava o ouro do armazem da conta.
 type StorageGoldStore interface {
 	SaveStorageGold(ctx context.Context, accountID uint32, gold int64) error
+}
+
+// CashStore grava o saldo premium da conta.
+type CashStore interface {
+	SaveCash(ctx context.Context, accountID uint32, cash uint32) error
 }
 
 // Handler atende os pacotes do canal.
@@ -129,13 +135,18 @@ type Handler struct {
 	Accounts auth.Accounts
 	// AccountGold grava o ouro do armazem. Nil desliga a gravacao.
 	AccountGold StorageGoldStore
-	Chars       Characters
-	Items       ItemSource
-	SkillDB     SkillStore
-	GuildDB     GuildStore
-	MailDB      MailStore
-	AuctionDB   AuctionStore
-	Numerics    NumericStore
+	// AccountCash grava o saldo premium. Nil desliga a gravacao.
+	AccountCash CashStore
+	// Premium e o catalogo da loja premium (PI.bin); nil recusa a loja em vez
+	// de ler fora do vetor como a origem fazia.
+	Premium   PremiumTable
+	Chars     Characters
+	Items     ItemSource
+	SkillDB   SkillStore
+	GuildDB   GuildStore
+	MailDB    MailStore
+	AuctionDB AuctionStore
+	Numerics  NumericStore
 	// Chan e o registro de quem esta conectado a este canal.
 	Chan *Channel
 	// Mobs e o mundo de mobs deste canal.
@@ -308,6 +319,12 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.useItem(ctx, c, s, p)
 	case CodeUseBuffItem:
 		return h.useBuffItem(ctx, c, s, p)
+	case CodeBuyItemCash:
+		return h.buyItemCash(ctx, c, s, p)
+	case CodeSendGift:
+		return h.sendGift(ctx, c, s, p)
+	case CodeUnsealItem:
+		return h.unsealItem(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta
@@ -585,6 +602,18 @@ func (h *Handler) saveItems(s *Session) {
 	if h.Items != nil && len(s.Storage.Slots) > 0 && s.Account.ID != 0 {
 		if err := h.Items.SaveStorage(ctx, s.Account.ID, s.Storage); err != nil {
 			h.log().Error("gravar armazem",
+				"usuario", s.Username, "conta", s.Account.ID, "erro", err)
+		}
+	}
+	if h.Items != nil && len(s.Cash.Slots) > 0 && s.Account.ID != 0 {
+		if err := h.Items.SaveCash(ctx, s.Account.ID, s.Cash); err != nil {
+			h.log().Error("gravar inventario premium",
+				"usuario", s.Username, "conta", s.Account.ID, "erro", err)
+		}
+	}
+	if h.AccountCash != nil && s.Account.ID != 0 {
+		if err := h.AccountCash.SaveCash(ctx, s.Account.ID, s.CashBalance); err != nil {
+			h.log().Error("gravar cash",
 				"usuario", s.Username, "conta", s.Account.ID, "erro", err)
 		}
 	}

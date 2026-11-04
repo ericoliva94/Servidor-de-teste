@@ -176,6 +176,36 @@ const maxBuffSeconds = 24 * 60 * 60
 //
 // A origem indexava "Reinforce3[GetItemReinforce3Index(Index)]" sem checagem,
 // e o indice calculado podia passar do fim da tabela.
+// PremiumAt devolve a linha da tabela premium pela POSICAO, ou nil fora da
+// faixa.
+//
+// A origem fazia "PremiumItems[Packet.Data]" com Packet.Data vindo do cliente
+// como DWORD, num vetor dinamico, sem nenhuma checagem
+// (PacketHandlers.pas:4578) — e "PremiumItems[Premium.Index]" com o valor
+// guardado no inventario premium (ItemFunctions.pas:2005).
+func (t *Tables) PremiumAt(i int) *PremiumItem {
+	if t == nil || i < 0 || i >= len(t.Premium) {
+		return nil
+	}
+	return &t.Premium[i]
+}
+
+// PremiumByIndex acha a linha pelo campo Index, nao pela posicao.
+//
+// Porte de TItemFunctions.FindPremiumIndex, que existe na origem exatamente
+// para isso — e que NENHUM dos dois pontos que indexam a tabela usa.
+func (t *Tables) PremiumByIndex(index uint32) (*PremiumItem, int) {
+	if t == nil || index == 0 {
+		return nil, -1
+	}
+	for i := range t.Premium {
+		if t.Premium[i].Index == index {
+			return &t.Premium[i], i
+		}
+	}
+	return nil, -1
+}
+
 func (t *Tables) Reinforce3At(i int) *ArmorAttributeReinforce {
 	if t == nil || i < 0 || i >= len(t.Reinforce3) {
 		return nil

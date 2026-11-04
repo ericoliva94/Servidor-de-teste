@@ -25,7 +25,8 @@ func (a Accounts) ByUsername(ctx context.Context, username string) (auth.Account
 		       COALESCE(last_token_creation_time, 0) AS last_token_creation_time,
 		       account_status, nation, ban_days,
 		       COALESCE(account_type, 0) AS account_type,
-		       COALESCE(storage_gold, 0) AS storage_gold
+		       COALESCE(storage_gold, 0) AS storage_gold,
+		       COALESCE(cash, 0) AS cash
 		  FROM accounts
 		 WHERE username = :username
 		 LIMIT 1`
@@ -54,9 +55,10 @@ func (a Accounts) ByUsername(ctx context.Context, username string) (auth.Account
 		banDays      int64
 		accType      int64
 		storageGold  int64
+		cash         int64
 	)
 	if err := rows.Scan(&acc.ID, &user, &pwHash, &token, &tokenCreated,
-		&status, &nation, &banDays, &accType, &storageGold); err != nil {
+		&status, &nation, &banDays, &accType, &storageGold, &cash); err != nil {
 		return auth.Account{}, false, fmt.Errorf("store: ler conta: %w", err)
 	}
 	if err := rows.Err(); err != nil {
@@ -81,6 +83,9 @@ func (a Accounts) ByUsername(ctx context.Context, username string) (auth.Account
 	// acima de 4.294.967.295 voltava negativo. Aqui o valor vem inteiro e
 	// so o negativo, que nao existe em jogo, e cortado.
 	acc.StorageGold = max(storageGold, 0)
+	// Cash e Cardinal na origem; um valor negativo no banco virava um numero
+	// enorme ao ser lido para o campo sem sinal.
+	acc.Cash = clampToDwordAuth(cash)
 	return acc, true, nil
 }
 
@@ -115,6 +120,39 @@ func (a Accounts) SaveToken(ctx context.Context, accountID uint32, token string,
 		sql.Named("id", accountID))
 	if err != nil {
 		return fmt.Errorf("store: gravar token: %w", err)
+	}
+	return nil
+}
+
+// clampToDwordAuth corta um valor do banco na faixa do DWORD sem sinal.
+func clampToDwordAuth(v int64) uint32 {
+	if v <= 0 {
+		return 0
+	}
+	if v > 0xFFFFFFFF {
+		return 0xFFFFFFFF
+	}
+	return uint32(v)
+}
+
+// SaveCash grava o saldo premium de uma conta.
+//
+// A origem gravava este campo no mesmo UPDATE gigante do personagem
+// (Player.pas:2661), montado por concatenacao de texto, e so quando
+// SaveInGame era chamado: uma compra feita pouco antes de o servidor cair
+// cobrava o cash e nao entregava o item, ou o contrario.
+func (a Accounts) SaveCash(ctx context.Context, accountID uint32, cash uint32) error {
+	if accountID == 0 {
+		return fmt.Errorf("store: gravar cash sem conta")
+	}
+	const q = `
+		UPDATE accounts
+		   SET cash = :cash
+		 WHERE id = :id`
+	if _, err := a.DB.Exec(ctx, q,
+		sql.Named("cash", cash),
+		sql.Named("id", accountID)); err != nil {
+		return fmt.Errorf("store: gravar cash: %w", err)
 	}
 	return nil
 }

@@ -287,6 +287,11 @@ func (it Items) SaveStorage(ctx context.Context, accountID uint32, set ItemSet) 
 	return it.SaveSet(ctx, accountID, SlotTypeStorage, set)
 }
 
+// SaveCash grava o inventario premium de uma conta.
+func (it Items) SaveCash(ctx context.Context, accountID uint32, set ItemSet) error {
+	return it.SaveSet(ctx, accountID, SlotTypeCash, set)
+}
+
 // GuildChest le os itens do bau de uma guilda.
 //
 // owner e o INDICE da guilda, nao o slot dela no vetor global: e o que a

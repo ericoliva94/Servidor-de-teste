@@ -122,6 +122,13 @@ type Session struct {
 	Storage     store.ItemSet
 	StorageGold int64
 
+	// Cash e o inventario premium da CONTA, e CashBalance o saldo dela. Na
+	// origem eram Account.Header.CashInventory.Items e .Cash. O que cada slot
+	// guarda nao e um indice de item: e o INDICE DO CATALOGO premium, que so
+	// vira item ao ser usado.
+	Cash        store.ItemSet
+	CashBalance uint32
+
 	// Skills e a arvore de habilidades do personagem.
 	Skills model.SkillsList
 	// UsingSkill e a skill em lancamento, zero quando nao ha nenhuma.

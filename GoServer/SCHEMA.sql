@@ -139,3 +139,8 @@ CREATE TABLE IF NOT EXISTS auction_offers (
 --
 --   ALTER TABLE accounts ADD COLUMN storage_gold BIGINT NOT NULL DEFAULT 0;
 --   ALTER TABLE guilds   ADD COLUMN storage_gold BIGINT UNSIGNED NOT NULL DEFAULT 0;
+--   ALTER TABLE accounts ADD COLUMN cash INT UNSIGNED NOT NULL DEFAULT 0;
+--
+-- O inventario premium usa a mesma tabela items, com slot_type 10 e owner_id
+-- igual ao id da CONTA. O que cada slot guarda e o indice do catalogo premium
+-- (PI.bin), nao o de um item.

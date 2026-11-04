@@ -671,6 +671,7 @@ type itensFalsos struct {
 	inv   map[uint32]store.ItemSet
 	arm   map[uint32]store.ItemSet
 	bau   map[uint32]store.ItemSet
+	cash  map[uint32]store.ItemSet
 	erro  error
 	// gravados guarda o que os Save* receberam.
 	gravados map[string]store.ItemSet
@@ -738,8 +739,18 @@ func (f itensFalsos) SaveGuildChest(_ context.Context, id uint32, set store.Item
 	return f.erro
 }
 
-func (f itensFalsos) Cash(_ context.Context, _ uint32) (store.ItemSet, error) {
-	return store.ItemSet{Slots: make([]model.Item, store.CashSlots)}, nil
+func (f itensFalsos) Cash(_ context.Context, id uint32) (store.ItemSet, error) {
+	if s, ok := f.cash[id]; ok {
+		return s, f.erro
+	}
+	return store.ItemSet{Slots: make([]model.Item, store.CashSlots)}, f.erro
+}
+
+func (f itensFalsos) SaveCash(_ context.Context, id uint32, set store.ItemSet) error {
+	if f.gravados != nil {
+		f.gravados[fmt.Sprintf("cash:%d", id)] = set
+	}
+	return f.erro
 }
 
 // conjuntoEquip monta um ItemSet de equipamento a partir de pares slot/indice.

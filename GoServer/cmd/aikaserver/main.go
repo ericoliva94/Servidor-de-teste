@@ -90,8 +90,10 @@ func run() error {
 		auctionDB game.AuctionStore
 		numerics  game.NumericStore
 		tokens    tokensrv.Store
-		// contaOuro grava o ouro do armazem; nil sem banco.
+		// contaOuro grava o ouro do armazem e contaCash o saldo premium;
+		// nil sem banco.
 		contaOuro game.StorageGoldStore
+		contaCash game.CashStore
 	)
 	if *skipDB {
 		log.Warn("subindo sem banco: nenhum login sera aceito")
@@ -122,6 +124,7 @@ func run() error {
 		accounts = accs
 		tokens = accs
 		contaOuro = accs
+		contaCash = accs
 		cs := store.Characters{DB: db}
 		chars = cs
 		numerics = cs
@@ -209,6 +212,8 @@ func run() error {
 		Chan:           canal,
 		Accounts:       accounts,
 		AccountGold:    contaOuro,
+		AccountCash:    contaCash,
+		Premium:        tables,
 		Chars:          chars,
 		Items:          items,
 		SkillDB:        skillDB,
@@ -560,6 +565,8 @@ func (noItems) GuildChest(context.Context, uint32) (store.ItemSet, error) {
 }
 
 func (noItems) SaveGuildChest(context.Context, uint32, store.ItemSet) error { return nil }
+
+func (noItems) SaveCash(context.Context, uint32, store.ItemSet) error { return nil }
 
 // noSkills devolve arvore vazia. Usado com -no-db.
 type noSkills struct{}

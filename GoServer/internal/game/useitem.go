@@ -145,10 +145,7 @@ func (h *Handler) useItem(ctx context.Context, c *netsrv.Conn, s *Session, p pro
 	case store.SlotTypeItemUse:
 		return h.repairWithItem(c, s, int(pkt.Slot), pkt.Type1)
 	case store.SlotTypeCash:
-		// UsePremiumItem depende do inventario premium, que ainda nao esta
-		// portado.
-		h.message(c, "Itens premium ainda nao estao disponiveis neste servidor.")
-		return nil
+		return h.usePremiumItem(ctx, c, s, int(pkt.Slot))
 	default:
 		// A origem caia no fim do case sem responder.
 		h.log().Debug("usar item com tipo de slot desconhecido",

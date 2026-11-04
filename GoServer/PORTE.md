@@ -105,7 +105,8 @@ de evidências.
 | 10s | Console 5555: socket de comando com autenticação, e os comandos de GM pelo sussurro | `ConsoleSocket.pas`, `CommandHandlers.pas` | **pronto** (ver abaixo) |
 | 10t | Armazém e baú de guilda: opção de NPC (`$30F`/`$348`), armazém (`$137`/`$310`), baú (`$D58`/`$F10`/`$D18`/`$F2F`), ouro (`$F59`) e arrasto de item nos dois | `PacketHandlers.pas` (`OpenNPC`, `ChangeGold`, `MoveItem`), `GuildData.pas` (`OpenChest`), `Player.pas` (`SendStorage`) | **pronto** (ver abaixo) |
 | 10u | Usar item: `$31D` (poções, moedas, experiência, buffs, bolsas, pedra de reparo, Símbolo da Confiança) e `$21B` (itens de buff) | `PacketHandlers.pas` (`UseItem`, `UseBuffItem`), `ItemFunctions.pas` (`TItemFunctions.UseItem`) | **pronto** (ver abaixo; baús com conteúdo chumbado, receita, portal, pran e premium a fazer) |
-| 10v | Nação, eventos, ranked, pet, pran, cerco, NPC/loja, central de pran, baús de presente, receitas | `Nation/`, `Events/`, `Rankeds/`, `PET.pas`, `NPC.pas` | a fazer |
+| 10v | Inventário premium: comprar (`$209`), usar (`$31D` com `CASH_TYPE`), presentear (`$356`), saldo (`$139`), slots (`$138`) e selo de item (`$224`) | `PacketHandlers.pas` (`BuyItemCash`, `SendGift`, `UnsealItem`), `ItemFunctions.pas` (`UsePremiumItem`), `MiscData.pas` (`TItem.SetIsSealed`) | **pronto** (ver abaixo; cupom a fazer) |
+| 10w | Nação, eventos, ranked, pet, pran, cerco, NPC/loja, central de pran, baús de presente, receitas, cupom | `Nation/`, `Events/`, `Rankeds/`, `PET.pas`, `NPC.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -1617,10 +1618,206 @@ cuja mensagem, aliás, diz `'950.000.00'`.
 - **A bolsa vai sem prazo.** A origem chamava `SetItemDuration` antes de mover
   a bolsa para o slot. A duração de item ainda não está portada, então a bolsa
   entra sem prazo.
-- **`UnsealItem` não está portado.** Ele desela o item e em seguida **usa** o
-  item (`TItemFunctions.UseItem(Player, Packet.Data)`), e manda o aviso com
-  `SendRefreshItemSlot(Packet.Data, False)` — a sobrecarga de dois argumentos,
-  cujo primeiro parâmetro é o *tipo* de slot, não o slot. Fica para a fase do
-  selo.
+- **`UnsealItem` fica para a fase seguinte** (ver "Inventário premium e selo
+  de item" abaixo). Ele desela o item e em seguida **usa** o item
+  (`TItemFunctions.UseItem(Player, Packet.Data)`).
+
+  Correção de uma anotação anterior desta seção: ela dizia que o
+  `SendRefreshItemSlot(Packet.Data, False)` daquela função passava o *tipo* de
+  slot no lugar do slot. Está errado — a sobrecarga de dois argumentos recebe
+  o **slot** e fixa `TypeSlot := $1` internamente (`BaseMob.pas:2589`), então
+  aquela chamada está correta. O que essa sobrecarga tem de problema é indexar
+  `Self.Character.Inventory[SlotItem]` com um `WORD` sem conferir a faixa,
+  duas vezes, deixando a guarda por conta de quem chama.
 - **Inventário premium (`CASH_TYPE`) recusado.** `UsePremiumItem` depende do
   inventário premium (`slot_type` 10), que ainda não está portado.
+
+### Inventário premium e selo de item (`$209`, `$356`, `$224`, `CASH_TYPE`)
+
+O inventário premium é da **conta**: 24 slots (`TCashInventory.Items`) mais um
+saldo (`Cash`, um `Cardinal`), com os itens na tabela `items` sob
+`slot_type` 10 e `owner_id` igual ao id da conta. O que cada slot guarda **não
+é um índice de item**: é o índice do **catálogo** premium (`PI.bin`), que só
+vira item no inventário quando o jogador o retira.
+
+#### O catálogo é indexado pelo valor, não pela posição
+
+A origem tem uma função escrita exatamente para converter uma coisa na outra:
+
+```pascal
+class function TItemFunctions.FindPremiumIndex(Index: WORD): WORD;
+begin
+  Result := 0;
+  for i := 0 to Length(PremiumItems) - 1 do
+    if (PremiumItems[i].Index = Index) then
+    begin
+      Result := i;
+      Break;
+    end;
+end;
+```
+
+E **nenhum dos dois pontos que indexam a tabela a usa**:
+
+```pascal
+item.Index := PremiumItems[Premium.Index].ItemIndex;      // UsePremiumItem
+if(PremiumItems[Packet.Data].show = 0) then …             // BuyItemCash
+```
+
+O segundo é o pior: `Packet.Data` é um `DWORD` que vem **direto do cliente**,
+`PremiumItems` é um vetor dinâmico, e não há checagem nenhuma. Um índice
+qualquer lê memória fora da tabela, e o `Price` que sair dali decide a compra —
+com um preço lido como zero o item sai de graça. Em seguida a mesma posição
+inválida é lida de novo para `Price` e gravada no slot com
+`AddItem(Packet.Data)`.
+
+No porte os dois caminhos procuram a linha pelo campo `Index`
+(`Tables.PremiumByIndex`), e o índice que não existe é recusado.
+
+#### Slot premium fora do vetor, com escrita
+
+```pascal
+Premium := @Player.Account.Header.CashInventory.Items[Slot];
+…
+ZeroMemory(Premium, sizeof(TItemCash));
+```
+
+`Slot` vem de `Packet.Slot`, um `DWORD` que o handler do `$31D` só confere
+contra **63** (`if (Packet.Slot > 63) then Exit`), e `Items` é
+`ARRAY [0..23]`. Um slot de 24 a 63 lê e, três linhas depois, **escreve** oito
+bytes fora do vetor — em cima do resto de `TAccountHeader`, que é onde ficam
+`NumError`, `NumericToken` e `PlayerDelete`.
+
+`TCashInventory.IsEmpyt(Slot: byte)` tem o mesmo problema sem a escrita:
+indexa `ARRAY [0..23]` com um byte, então 24 a 255 lê fora.
+
+#### Slot vazio entrega item de graça
+
+`UsePremiumItem` não confere se o slot tem alguma coisa. Com `Premium.Index`
+igual a zero, `PremiumItems[0]` é a primeira linha do catálogo, e o item dela
+é entregue de verdade — **repetidamente**, a cada clique num slot vazio.
+
+#### `Result` lido depois do `ZeroMemory`
+
+```pascal
+ZeroMemory(Premium, sizeof(TItemCash));
+Player.Base.SendRefreshItemSlot(CASH_TYPE, Slot, item, False);
+Result := (Premium.Index = 0);
+```
+
+`Premium` acabou de ser zerado, então `Result` é sempre `True`. O chamador
+(`TPacketHandlers.UseItem`) usa esse valor como retorno do handler.
+
+#### `DecCardinal` zera o saldo de quem tem muito cash
+
+```pascal
+function DecCardinal(var x: Cardinal; Value: Integer): boolean;
+var
+  Res: Integer;
+begin
+  Res := x - Value;
+  if (Res < MIN_WORD_SIZE) then
+    x := 0
+  else
+    x := Res;
+```
+
+`x` é `Cardinal` (32 bits sem sinal) e `Res` é `Integer` (32 bits **com**
+sinal). Um saldo acima de 2.147.483.647 estoura o `Integer` na subtração,
+`Res` fica negativo, e a função zera o saldo inteiro. Quem tivesse mais de 2,1
+bilhões de cash perdia tudo na primeira compra, de qualquer preço.
+
+#### `SendGift` escolhe o destinatário pelo índice de conexão
+
+```pascal
+if not(Servers[Player.ChannelIndex].Players[Packet.Target].Base.IsActive) then
+  Exit;
+OtherPremium := @Servers[Player.ChannelIndex].Players[Packet.Target]
+  .Account.Header.CashInventory;
+```
+
+`Packet.Target` é um `WORD` do cliente usado como índice no vetor de conexões,
+sem checagem — e dali a função **lê e escreve** o inventário premium daquele
+slot. O pacote também carrega `Nick: ARRAY [0..15]`, o apelido que o jogador
+digitou, e a origem simplesmente **não o usa**.
+
+No porte o destinatário é resolvido pelo apelido (`Chan.FindByCharacter`), como
+no correio, e `Target` é ignorado.
+
+Outros três defeitos no mesmo bloco: não há checagem de presentear a si mesmo,
+não se olha o campo `Trade` do catálogo (que é justamente o que diz se o item
+pode ser passado adiante), e o item é retirado do remetente com `ZeroMemory`
+**depois** de ter sido posto no destinatário — sem transação, um erro no meio
+duplicava. No porte a retirada vem primeiro: uma falha deixa o item com o
+remetente em vez de criar uma cópia.
+
+#### `UnsealItem` usa o item
+
+```pascal
+if (Packet.Data > 63) then Exit;
+Item := @Player.Character.Base.Inventory[Packet.Data];
+if (Item.Index = 0) then Exit;
+if (Item.IsSealed) then
+  Item.IsSealed := False;
+TItemFunctions.UseItem(Player, Packet.Data);
+Player.Base.SendRefreshItemSlot(Packet.Data, False);
+```
+
+A chamada a `UseItem` é **incondicional** e vem logo depois de desselar: abrir
+o selo de uma poção bebe a poção; abrir o selo de uma bolsa gasta a bolsa. E
+como o `if (Item.IsSealed)` não tem `else`, um item que **não** estava selado
+também cai no `UseItem` — o `$224` acaba sendo um "usar item" sem a guarda de
+`IsDead` que o `$31D` tem.
+
+#### `IsSealed` não distingue selo de refino zero
+
+```pascal
+function TItem.GetIsSealed: Boolean;
+begin
+  Move(self.Refi, UnixDate, sizeof(DWORD));
+  Result := (UnixDate = 0);
+end;
+```
+
+Lê `Refi` e `Time` como um `DWORD` único e considera selado quando os quatro
+bytes são zero. Isso é verdade também para um **equipamento comum de refino 0
+sem prazo** — um item recém-criado, por exemplo. Na origem, pedir para abrir o
+selo de uma arma assim gravava nela um prazo de validade:
+
+```pascal
+self.Refi := 00;
+self.ExpireDate := IncHour(Now, ItemList[self.Index].Duration + 2);
+```
+
+e em seguida a "usava". No porte o item só é desselado quando a tabela diz que
+ele é selável, isto é quando tem `Duration` configurada — o que separa o item
+selado de verdade do item comum de refino 0.
+
+#### Gravação
+
+Na origem o saldo e os slots premium só eram gravados pelo `UPDATE` gigante de
+`TPlayer.SaveInGame`, montado por concatenação de texto: uma compra feita pouco
+antes de o servidor cair cobrava o cash e não entregava o item, ou o
+contrário. No porte o saldo vai a cada compra (`accounts.cash`, um `UPDATE` de
+uma coluna), os slots a cada retirada e presente, e os dois também na saída do
+jogador.
+
+#### Diferenças deliberadas
+
+- **Presentear a si mesmo é recusado**, inclusive para outro personagem da
+  mesma conta: o inventário premium é da conta, então as duas pontas seriam o
+  mesmo vetor. A origem não conferia nada disso.
+- **Índice de catálogo acima de 65535 é recusado.** `TItemCash.Index` é `WORD`
+  e `AddItem` recebe `Integer`, então na origem um índice maior era truncado
+  em silêncio e o slot passava a apontar para outra linha.
+- **O `$139` sai com `Index` zero no cabeçalho**, como na origem
+  (`SendData(0, $139, …)`) — os pacotes vizinhos usam o ClientID ou `$7535`.
+- **`ReclaimCoupom` não está portado.** Ele abre uma conexão MySQL própria por
+  chamada, monta o cupom caractere por caractere num laço de 1 a 16 e consulta
+  por concatenação de texto. Fica para a fase do cupom.
+- **Um inventário premium por sessão.** `s.Cash` é uma cópia por sessão de um
+  dado que é da conta, como `Account.Header.CashInventory` era por conexão na
+  origem. Duas sessões da mesma conta ao mesmo tempo (o que o login normal não
+  permite, mas dois canais permitiriam) divergiriam, e a última gravação
+  venceria. É o mesmo comportamento da origem; a correção pertence à fase que
+  unificar o estado de conta entre canais.
