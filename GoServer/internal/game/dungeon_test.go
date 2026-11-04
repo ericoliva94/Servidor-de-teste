@@ -67,6 +67,10 @@ func (t *tabelaDungeon) ByEntranceNPC(npc uint16, dif uint32) (*dungeondata.Defi
 
 func handlerComDungeon(t *testing.T, pontos int) (*Handler, *tabelaDungeon) {
 	h := handlerComGuildas(t)
+	// Sem fonte fixa, o golpe do mob cai no ramo "Miss" em 14% das rodadas
+	// (r de 2 a 15 em dungeonMobAttack) e o teste de dano falha sozinho.
+	// 50 cai no ramo normal, como nos testes de IA de mob.
+	h.Rand = randFixo{v: 50}
 	tab := novaTabelaDungeon(pontos)
 	h.Dungeons = dungeon.NewRegistry()
 	h.DungeonLobbies = dungeon.NewLobbies()

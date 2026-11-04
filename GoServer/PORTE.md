@@ -91,19 +91,20 @@ de evidências.
 | 10e | Registro do canal, movimento (`$301`), spawn (`$349`) e remoção (`$101`) | `ServerSocket.pas`, `BaseMob.pas`, `PacketHandlers.pas` | **pronto** |
 | 10f | Inventário e equipamento do banco, bônus de refino no HP/MP | `Player.pas`, `ItemFunctions.pas` | **pronto** |
 | 10g | Conversa (`$F86`), rotação (`$305`), info de personagem (`$22C`/`$19E`), hora (`$202`) | `PacketHandlers.pas`, `Player.pas` | **pronto** |
-| 10h | Inventário em jogo: mover (`$70F`), descartar (`$32C`), empilhar, gravar na saída | `PacketHandlers.pas`, `ItemFunctions.pas`, `Player.pas` | **pronto** (inventário↔equipamento; armazém, baú de guilda e pran a fazer) |
+| 10h | Inventário em jogo: mover (`$70F`), descartar (`$32C`), empilhar, gravar na saída | `PacketHandlers.pas`, `ItemFunctions.pas`, `Player.pas` | **pronto** (inventário↔equipamento; armazém e baú na 10t; pran a fazer) |
 | 10i | Atributos derivados (`GetCurrentScore`), ataque básico (`$302`), morte e revive (`$303`) | `BaseMob.pas`, `PacketHandlers.pas` | **pronto** (sem skill, dungeon, pran nem mascote) |
 | 10j | Mobs: carga dos dois CSV, spawn (`$35E`), visibilidade, golpe, morte, experiência (`$108`) e respawn | `ServerSocket.pas`, `MOB.pas`, `Player.pas` | **pronto** (sem IA de movimento nem ataque do mob) |
 | 10k | IA de mob: patrulha, perseguição e golpe no jogador | `MOB.pas` (`MobHandler`, `MobMoviment`, `AttackPlayer`) | **pronto** (sem skill de mob nem guarda) |
 | 10l | Grupo: convidar (`$322`), aceitar (`$323`), sair/expulsar (`$324`), desfazer (`$325`), liderança (`$34B`), pedir entrada (`$38F`), estado (`$326`), posição (`$11D`) e conversa de grupo | `PartyData.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (sem raid) |
 | 10m | Skills: aprender (`$31C`), lançar (`$320`), zerar (`$32A`), cancelar (`$327`), listas (`$106`/`$107`), recarga, custo de MP e buff | `SkillFunctions.pas`, `PacketHandlers.pas`, `BaseMob.pas` | **pronto** (motor genérico; os casos especiais por skill ficam para a fase seguinte) |
 | 10n | Drop: carga das 13 listas, sorteio, item no chão (`$33B`), coleta (`$336`) e expiração | `Load.pas`, `BaseMob.pas` (`DropItemFor`), `ServerSocket.pas` (`CreateMapObject`) | **pronto** |
-| 10o | Guilda: criar (`$341`), convite (`$F7B`/`$67D`/`$F7E`), expulsar (`$F2D`), sair (`$F1C`), rank (`$F1D`), mestre (`$619`), avisos (`$F20`), site (`$F21`), permissões (`$F22`), info (`$965`), membros (`$97F`) e conversa de guilda | `GuildData.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (sem baú, aliança, skill de guilda nem cerco) |
+| 10o | Guilda: criar (`$341`), convite (`$F7B`/`$67D`/`$F7E`), expulsar (`$F2D`), sair (`$F1C`), rank (`$F1D`), mestre (`$619`), avisos (`$F20`), site (`$F21`), permissões (`$F22`), info (`$965`), membros (`$97F`) e conversa de guilda | `GuildData.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (baú na 10t; sem aliança, skill de guilda nem cerco) |
 | 10p | Correio: conferir (`$3F16`), enviar (`$3F15`), lista (`$3F17`), abrir/apagar (`$3F18`), retirar anexo (`$3F1A`), não lidas (`$3F1B`) | `MailFunctions.pas`, `CharacterMail.pas` | **pronto** (caixa no MySQL; ver abaixo) |
 | 10q | Leilão: registrar (`$3F0B`), comprar (`$3F0C`), lista (`$3F0D`), cancelar (`$3F10`), minhas ofertas (`$3F11`) e vencimento | `AuctionFunctions.pas`, `PacketHandlers.pas` | **pronto** (ofertas no MySQL; entrega pelo correio) |
 | 10r | Dungeon: pedir entrada (`$334`), saguão (`$145`), confirmar (`$355`), instância por grupo, IA do mob, exp, drop e saída | `Dungeon.pas`, `Player.pas` (`CreateDungeonInstance`), `ServerSocket.pas` (`InitDungeons`) | **pronto** (sem raid; ver abaixo) |
 | 10s | Console 5555: socket de comando com autenticação, e os comandos de GM pelo sussurro | `ConsoleSocket.pas`, `CommandHandlers.pas` | **pronto** (ver abaixo) |
-| 10t | Nação, eventos, ranked, armazém, baú de guilda, pet, pran, cerco, NPC/loja | `Nation/`, `Events/`, `Rankeds/`, `PET.pas`, `NPC.pas` | a fazer |
+| 10t | Armazém e baú de guilda: opção de NPC (`$30F`/`$348`), armazém (`$137`/`$310`), baú (`$D58`/`$F10`/`$D18`/`$F2F`), ouro (`$F59`) e arrasto de item nos dois | `PacketHandlers.pas` (`OpenNPC`, `ChangeGold`, `MoveItem`), `GuildData.pas` (`OpenChest`), `Player.pas` (`SendStorage`) | **pronto** (ver abaixo) |
+| 10u | Nação, eventos, ranked, pet, pran, cerco, NPC/loja, central de pran | `Nation/`, `Events/`, `Rankeds/`, `PET.pas`, `NPC.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -1118,3 +1119,308 @@ Comandos portados: `additem`, `addgold`, `addexp`, `addlevel`, `addbuff`,
 existem na origem e o console precisa (o nome do jogador agora é obrigatório).
 Os outros 24 nomes da origem estão no registro e respondem dizendo de que
 sistema dependem, em vez de não fazer nada em silêncio.
+
+### Armazém e baú de guilda (`OpenNPC`, `ChangeGold`, `MoveItem`, `TGuild.OpenChest`)
+
+#### O baú de guilda não abria na origem
+
+`TGuild.OpenChest` recebe o personagem assim (`PacketHandlers.pas:2513`):
+
+```pascal
+if (Guilds[Player.Character.GuildSlot].OpenChest(Player.Character.Index,
+  Player.ChannelIndex) = False) then
+```
+
+e começa por:
+
+```pascal
+if Servers[ChannelId].GetPlayerByCharIndex(CharIndex, Player) = False then
+  Exit;
+```
+
+`Player.Character.Index` é o campo `Index: DWORD` de `TPlayerCharacter`
+(`PlayerData.pas:306`). Ele é **lido em vinte lugares e nunca atribuído em
+nenhum**: `grep -rn "Character\.Index *:="` no código inteiro não devolve uma
+linha. Vale sempre zero. `GetPlayerByCharIndex(0, …)` não acha ninguém,
+`OpenChest` devolve `False`, e o ramo `$B` da janela de NPC sai zerando
+`OpennedNPC` e `OpennedOption`. **O baú da guilda nunca abriu.** É o mesmo
+diagnóstico da dungeon: o sistema está no código, nunca rodou.
+
+O mesmo campo zerado aparece em outros três lugares:
+
+- `Guild.SendMemberLogout(Self.Character.Index)` (`Player.pas:629`, `733`,
+  `4923`, `5074`): a saída nunca marca o membro como offline, então a lista da
+  guilda mostra todo mundo conectado para sempre.
+- `Guilds[GuildSlot].Members[MemberId].CharIndex := Self.Character.Index`
+  (`Player.pas:5226`): o remendo que tenta recadastrar o jogador na guilda
+  grava **zero** no `CharIndex` de um membro — e é um slot de membro novo a
+  cada login, porque `FindMemberFromCharIndex(0)` nunca acha.
+- `Packet.Character.CharIndex := Self.Character.Index` (`Player.pas:5557`): o
+  pacote sai com zero.
+
+No porte o dono do baú é o `CharIndex` do personagem selecionado
+(`Session.CharID()`), que é o mesmo id usado pelo resto do porte.
+
+#### `Guilds[0]` escreve antes do vetor
+
+`Guilds` é declarado `ARRAY [1 .. 50] OF TGuild` (`GlobalDefs.pas:43`) — **o
+limite de baixo é 1**. E `GetGuildSlotByID` devolve **zero** quando não acha a
+guilda (`ServerSocket.pas:4232`). Os seis caminhos do baú fazem
+
+```pascal
+Guild := @Guilds[Player.Character.GuildSlot];
+```
+
+conferindo apenas `GuildIndex <= 0`, nunca o slot. Com `GuildSlot = 0` isso é
+um registro `TGuild` inteiro — milhares de bytes, 128 membros e 50 itens —
+**antes** do início do vetor. O que vem antes de `Guilds` em `GlobalDefs.pas`
+são `InstantiatedNPCs`, `PlayersThreads` e, acima deles, as tabelas de dado
+carregadas do disco: `MapsData`, `MobPos`, `ScrollTeleportPosition`,
+`Recipes`. Escrever `Guild.Chest.Gold` ou `@Guild.Chest.Items[slot]` ali
+corrompe dado de jogo em silêncio.
+
+Esse padrão já tinha sido notado na origem: `SendToWorldSends` ganhou um
+remendo explícito (`"CORREÇÃO DEFINITIVA DO BUG"`, `Player.pas:5198`) que
+valida `GuildSlot >= Low(Guilds)` antes de usar. O remendo não foi aplicado a
+nenhum dos caminhos do baú. No porte a guilda vem de
+`guild.Registry.Of(charIndex)`, um mapa: índice inválido não acha nada.
+
+#### `Members[-1]`
+
+`OpenChest` lê a permissão antes de qualquer validação:
+
+```pascal
+if Self.GetRankConfig(Self.Members[Self.FindMemberFromCharIndex(CharIndex)
+  ].Rank).OpenGWH = False then
+```
+
+`FindMemberFromCharIndex` devolve `-1` quando o personagem não está na lista.
+`Members[-1].Rank` é uma leitura antes do início do vetor de membros. O mesmo
+padrão aparece em `MoveItem` e em `ChangeGold`, nas duas vezes que elas leem
+`UseGWH`. No porte `Guild.CanOf(charIndex)` devolve permissão vazia para quem
+não é membro, e `openGuildChest` recusa quem `FindMember` não acha.
+
+#### `MemberInChest = -1` abre o baú para qualquer um
+
+`OpenChest` grava o resultado de `FindMemberFromCharIndex` **sem conferir**:
+
+```pascal
+Self.MemberInChest := Self.FindMemberFromCharIndex(CharIndex);
+```
+
+Para um não-membro isso é `-1`. A partir daí o teste de posse que todos os
+caminhos usam,
+
+```pascal
+if Guild.MemberInChest <> Guild.FindMemberFromCharIndex(Player.Character.Index) then
+  Exit;
+```
+
+compara `-1` com `-1`: **passa**. Qualquer personagem que não esteja na lista
+de membros daquela guilda mexe no baú dela. E o laço da thread de prazo
+(`while not(MemberInChest < 0) …`) sai na primeira volta com `-1`, então nem o
+prazo salva.
+
+No porte o dono é um `CharIndex` e o baú fechado tem dono zero, que não é
+`CharIndex` de ninguém.
+
+#### Uma thread do sistema operacional por abertura de baú
+
+`TCloseChestThread` é criada a cada `OpenChest`:
+
+```pascal
+Self.CloseChestThread := TCloseChestThread.Create(True);
+Self.CloseChestThread.Guild := @Self;
+Self.CloseChestThread.Start;
+```
+
+- Sem `FreeOnTerminate`, e nada chama `Free`: o objeto `TThread` vaza a cada
+  abertura.
+- O campo `CloseChestThread` é sobrescrito sem olhar o que estava lá: abrir o
+  baú duas vezes deixa a primeira thread rodando e sem referência.
+- O laço é `Sleep(50)` — para um prazo de dois minutos, 2.400 voltas por baú
+  aberto, cada uma lendo `Now` e `MinutesBetween`.
+- `Guild := @Self` guarda o endereço de um registro do vetor global. A criação
+  de guilda faz `ZeroMemory(@Guilds[I], sizeof(Guilds[I]))`
+  (`PacketHandlers.pas:8272`): a thread continua lendo o registro depois de
+  ele ter sido zerado e reusado por outra guilda.
+
+No porte não há thread por baú: `Registry.SweepChests` roda no tique de 15
+segundos de `chestLoop` e percorre os baús abertos.
+
+#### O prazo avisava mas não fechava — o baú ficava trancado até o reinício
+
+Ao vencer o prazo, a thread faz exatamente isto e termina:
+
+```pascal
+Player.SendSignal(Player.Character.Base.ClientId, $F2F);
+Break;
+```
+
+Não chama `CloseChest`. O único caminho que chama `CloseChest` é o pacote
+`$F2F` **vindo do cliente** (`PacketHandlers.pas:8283`). Se o cliente não
+responder, ou se o jogador cair, `MemberInChest` fica apontando para ele e o
+baú da guilda fica trancado **para todos os membros até o servidor
+reiniciar**. Nada no caminho de desconexão chama `CloseChest` — é a mesma
+classe de vazamento do slot de dungeon.
+
+E o handler `$F2F` compara com um campo diferente do que `OpenChest` gravou:
+
+```pascal
+if Guild.MemberInChest = Guild.FindMemberFromCharIndex(Player.Base.Character.CharIndex)
+```
+
+`Player.Base.Character.CharIndex` é o id real; `OpenChest` gravou o índice
+achado por `Player.Character.Index`, que é zero. Os dois lados nunca podiam
+casar.
+
+No porte o baú fecha em quatro caminhos: o pacote do cliente, o prazo
+(`ChestTick`), fechar a janela do NPC e a desconexão (`chestOnDisconnect`).
+
+#### Dois membros duplicavam o item
+
+`srcItem` e `destItem` são ponteiros crus para `Guild.Chest.Items[slot]`, na
+memória global, e a troca é um `Move` de três linhas sem nenhuma proteção.
+Dois membros da mesma guilda arrastando o mesmo slot ao mesmo tempo levavam
+cada um uma cópia. O porte faz o movimento inteiro dentro de `Chest.Do`, com o
+mutex do baú tomado; `TestBauNaoDuplicaItemComMuitosMembros` prova com 32
+goroutines e `-race` que exatamente um leva o item.
+
+#### Ouro: `abs(math.MinInt64)` e `UInt64(Value)`
+
+`ChangeGold` recebe `Value: Int64` do cliente e usa `abs(Packet.Value)` nas
+guardas de saldo. `abs(Low(Int64))` não cabe no `Int64` e **volta negativo**:
+
+```pascal
+if Player.Account.Header.Storage.Gold < abs(Packet.Value) then Exit;
+if (Player.Character.Base.Gold + abs(Packet.Value)) > 2000000000 then …
+```
+
+Com `Value = -9223372036854775808` as duas comparações viram comparações com
+um número negativo gigante e **passam**, e as somas seguintes levam o ouro da
+bolsa e do armazém para valores absurdos. No porte esse valor é recusado logo
+na entrada, com registro no log.
+
+No baú a conta é feita em `UInt64`:
+
+```pascal
+Guild.Chest.Gold := Guild.Chest.Gold + UInt64(Packet.Value);
+```
+
+Para `Value` negativo o `UInt64()` é um número enorme que, por dar a volta,
+acerta a subtração por acidente. A guarda que deveria impedir a retirada acima
+do saldo compara um `UInt64` com um `Int64`. E no **depósito** não há teto
+nenhum — o teto de 2.000.000.000 existe só no ramo da retirada, e ali ele é
+conferido contra o ouro da *bolsa*, não contra o do baú. Um baú podia crescer
+até dar a volta em 1,8e19 e ficar quase zerado. No porte `Chest.MoveGold` faz
+a conta em `int64`, recusa a retirada acima do saldo e aplica
+`MaxChestGold = 2.000.000.000` nos dois sentidos.
+
+#### A guarda da janela de NPC existia só em metade dos caminhos
+
+A opção `$7` (armazém) do case de `OpenNPC` chama `SendStorage` e **sai pelo
+fim do case**, onde está
+
+```pascal
+Player.OpennedNPC := Packet.Index;
+Player.OpennedOption := Packet.Type1;
+```
+
+Só que vários ramos saem antes com `Exit`, e o resultado é um par incoerente.
+A consequência é visível no próprio código da origem: a guarda do depósito de
+ouro no armazém está **comentada**:
+
+```pascal
+{if not(Player.OpennedOption = 7) or (Player.OpennedNPC <= 0) then
+  Exit;}
+```
+
+e a do arrasto a partir do armazém também (`PacketHandlers.pas:3514`). No
+destino do arrasto ela está ativa (`3669`). O efeito prático é que **tirar**
+item e ouro do armazém funcionava de qualquer ponto do mapa, sem NPC nenhum, e
+**guardar** exigia o NPC. No porte `storageOpen` vale para os dois lados, e
+cada ramo do `openNPC` marca o que abriu.
+
+#### Carga do baú com slot fora do vetor
+
+`Load.pas:212` lê o slot do banco e escreve direto:
+
+```pascal
+ItemSlot := Byte(GuildQuery.Query.FieldByName('slot').AsInteger);
+Guilds[Slot].Chest.Items[ItemSlot].Index := …
+```
+
+`Items` é `ARRAY [0..49]`. Um slot de 50 a 255 escreve depois do fim do vetor,
+por cima de `Chest.Gold`, de `MemberInChest`, do **ponteiro**
+`CloseChestThread` e do início da guilda seguinte. É o mesmo padrão já
+corrigido no inventário e no armazém. No porte a faixa é conferida em
+`store.Items.ByOwner` e de novo em `Chest.LoadItems`, que reporta o que
+ignorou.
+
+#### O ouro do armazém vinha truncado do banco
+
+`Player.pas:875` lê um campo `Int64` com `AsInteger`:
+
+```pascal
+Self.Account.Header.Storage.Gold := PlayerSQLComp.Query.FieldByName
+  ('storage_gold').AsInteger;
+```
+
+Um armazém com mais de 2.147.483.647 de ouro voltava truncado do banco, e
+acima de 4.294.967.295 voltava negativo. No porte a coluna é lida como `int64`
+e o negativo é cortado.
+
+#### Gravação
+
+Na origem o armazém e o baú só eram gravados por caminhos periódicos
+(`TPlayer.SaveInGame` para o armazém, `TFunctions.SaveGuilds` para o baú), e
+`SaveGuilds` reescrevia a guilda inteira e todos os membros num `UPDATE`
+montado por concatenação de texto. Um depósito feito pouco antes de o servidor
+cair era perdido.
+
+No porte:
+
+- o ouro do armazém é gravado a cada movimento (`accounts.storage_gold`) e na
+  saída do jogador;
+- os itens do armazém são gravados na saída, junto do inventário, com o id da
+  **conta** como `owner_id` e `slot_type` 2 — igual à origem;
+- o ouro do baú é gravado a cada movimento por `SaveChestGold`, um `UPDATE` de
+  uma coluna;
+- os itens do baú são gravados a cada arrasto e no fechamento, com o **índice
+  da guilda** como `owner_id` e `slot_type` 3 — igual à origem.
+
+#### Diferenças deliberadas
+
+- **`$119` é o diálogo de dungeon, não `$348`.** Uma anotação anterior deste
+  porte dizia que `CodeDungeonDialog` era `$348`; `$348` é o `CloseNPCOption`
+  (`ServerSocket.pas:3171`). O diálogo é `$119`
+  (`NPCHandlers.pas:586`). Corrigido, e `ShowDungeonDialog` agora está
+  portado — com isso a opção 26 do NPC passa a marcar a janela e o fluxo de
+  dungeon da fase 10r fica alcançável pelo cliente.
+- **O nível mínimo do diálogo vem da tabela.** A origem lia sempre
+  `DG<nome>[0].LevelMin`, o da primeira dificuldade, mesmo que o jogador fosse
+  escolher outra.
+- **O baú só troca com inventário e armazém.** A origem deixava qualquer
+  combinação que passasse pelos dois `case` cair no `Move` final; equipamento
+  já era barrado pela guarda do topo.
+- **Os slots 84 e 85 do armazém são recusados.** São a central de pran, que a
+  origem só deixava receber item de `ItemType` 10 — e lá a checagem usava
+  `Player.Character.Base.Inventory[Packet.srcSlot]` mesmo quando a origem do
+  arrasto não era o inventário, lendo o item errado. Pran não está portado.
+- **Os slots 80 a 83 não se movem.** São as expansões do armazém, que a origem
+  exigia presentes para liberar cada grupo de 20 slots e que o seu próprio
+  `if (Packet.srcSlot < 80)` já barrava.
+- **A "Símbolo da Confiança" ainda não abre o armazém.** O item de
+  `ITEM_TYPE_STORAGE_OPEN` (226) abria o armazém pelo inventário
+  (`ItemFunctions.pas:4902`); isso depende do handler de usar item (`$31D`),
+  que não está portado. O armazém abre pelo NPC.
+- **O teto da bolsa no saque é o `MaxGold` do porte** (999.999.999.999), não o
+  2.000.000.000 da origem, para ficar coerente com o `/addgold` já portado. O
+  teto do armazém e do baú é o 2.000.000.000 da origem.
+
+#### Correção no próprio teste da fase 10r
+
+`TestMobDaDungeonPegaAlvoEBate` foi escrito sem fonte de sorteio fixa, e
+`dungeonMobAttack` cai no ramo `Miss` quando o sorteio dá de 2 a 15: o teste
+falhava sozinho em cerca de 14% das rodadas. `handlerComDungeon` agora injeta
+`randFixo{v: 50}`, como os testes de IA de mob já faziam.

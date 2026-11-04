@@ -29,7 +29,8 @@ func (g Guilds) All(ctx context.Context) ([]*guild.Guild, []string, error) {
 
 	const q = `SELECT id, name, nation, exp, level, leader_char_index,
 	                  notice1, notice2, notice3, site, ranks_config,
-	                  bravure_points, skill_points, promote
+	                  bravure_points, skill_points, promote,
+	                  COALESCE(storage_gold, 0) AS storage_gold
 	             FROM guilds
 	            ORDER BY id
 	            LIMIT 10000`
@@ -50,10 +51,11 @@ func (g Guilds) All(ctx context.Context) ([]*guild.Guild, []string, error) {
 			ranks              sql.NullString
 			bravura, skillPts  int64
 			promote            int64
+			ouroBau            int64
 		)
 		if err := rows.Scan(&id, &nome, &nation, &exp, &nivel, &lider,
 			&n1, &n2, &n3, &site, &ranks,
-			&bravura, &skillPts, &promote); err != nil {
+			&bravura, &skillPts, &promote, &ouroBau); err != nil {
 			rows.Close()
 			return nil, avisos, fmt.Errorf("store: ler guilda: %w", err)
 		}
@@ -74,6 +76,16 @@ func (g Guilds) All(ctx context.Context) ([]*guild.Guild, []string, error) {
 			BravurePoints: clampToDword(bravura),
 			SkillPoints:   clampToDword(skillPts),
 			Promote:       promote != 0,
+			Chest:         guild.NewChest(),
+		}
+		// O ouro do bau e UInt64 na origem mas vinha do banco por
+		// "AsLargeInt" (Int64, Load.pas:158) e era gravado por ToString: um
+		// valor negativo no banco virava um UInt64 enorme. Aqui o negativo e
+		// zero e o teto e aplicado no SetGold.
+		if gd.Chest.SetGold(uint64(max(ouroBau, 0))) {
+			avisos = append(avisos, fmt.Sprintf(
+				"guilda %d com %d de ouro no bau, acima do teto %d, limitado",
+				id, ouroBau, guild.MaxChestGold))
 		}
 		if nivel != int64(gd.Level) {
 			avisos = append(avisos, fmt.Sprintf(
@@ -188,8 +200,8 @@ func (g Guilds) Save(ctx context.Context, gd *guild.Guild) error {
 	const up = `INSERT INTO guilds
 		(id, name, nation, exp, level, leader_char_index,
 		 notice1, notice2, notice3, site, ranks_config,
-		 bravure_points, skill_points, promote)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 bravure_points, skill_points, promote, storage_gold)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON DUPLICATE KEY UPDATE
 		 name=VALUES(name), nation=VALUES(nation), exp=VALUES(exp),
 		 level=VALUES(level), leader_char_index=VALUES(leader_char_index),
@@ -197,7 +209,8 @@ func (g Guilds) Save(ctx context.Context, gd *guild.Guild) error {
 		 notice3=VALUES(notice3), site=VALUES(site),
 		 ranks_config=VALUES(ranks_config),
 		 bravure_points=VALUES(bravure_points),
-		 skill_points=VALUES(skill_points), promote=VALUES(promote)`
+		 skill_points=VALUES(skill_points), promote=VALUES(promote),
+		 storage_gold=VALUES(storage_gold)`
 
 	promote := 0
 	if gd.Promote {
@@ -207,7 +220,8 @@ func (g Guilds) Save(ctx context.Context, gd *guild.Guild) error {
 		gd.Index, gd.Name, gd.Nation, gd.Exp, gd.Level, gd.LeaderID,
 		gd.Notices[0], gd.Notices[1], gd.Notices[2], gd.Site,
 		formatRanksConfig(gd.RanksConfig[:]),
-		gd.BravurePoints, gd.SkillPoints, promote); err != nil {
+		gd.BravurePoints, gd.SkillPoints, promote,
+		gd.Chest.Gold()); err != nil {
 		return fmt.Errorf("store: gravar guilda %d: %w", gd.Index, err)
 	}
 
@@ -246,6 +260,23 @@ func (g Guilds) Save(ctx context.Context, gd *guild.Guild) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("store: confirmar guilda %d: %w", gd.Index, err)
+	}
+	return nil
+}
+
+// SaveChestGold grava so o ouro do bau de uma guilda.
+//
+// A origem nao tinha nada assim: o ouro do bau ia no UPDATE gigante de
+// TFunctions.SaveGuilds, que reescrevia a guilda inteira e todos os membros,
+// e que corria por um temporizador. Um deposito feito pouco antes de o
+// servidor cair era perdido.
+func (g Guilds) SaveChestGold(ctx context.Context, index uint16, gold uint64) error {
+	if index == 0 {
+		return fmt.Errorf("store: gravar ouro de bau sem guilda")
+	}
+	const q = `UPDATE guilds SET storage_gold = ? WHERE id = ?`
+	if _, err := g.DB.SQL().ExecContext(ctx, q, gold, index); err != nil {
+		return fmt.Errorf("store: gravar ouro do bau %d: %w", index, err)
 	}
 	return nil
 }

@@ -16,9 +16,12 @@ import (
 
 // Codigos de dungeon.
 const (
-	// CodeDungeonDialog e o $348 do NPC do portal, que manda a lista de
-	// dungeons que aquele NPC abre.
-	CodeDungeonDialog = 0x348
+	// CodeDungeonDialog e o $119 de TNPCHandlers.ShowDungeonDialog: servidor
+	// -> cliente, a dungeon que aquele NPC abre e o nivel minimo dela.
+	//
+	// Uma versao anterior deste porte anotou $348 aqui; $348 e o
+	// CloseNPCOption (ServerSocket.pas:3171), nao o dialogo.
+	CodeDungeonDialog = 0x119
 	// CodeDungeonLobby e o $145: servidor -> cliente, a tela de confirmacao.
 	CodeDungeonLobby = 0x145
 	// CodeDungeonEnter e o $334: cliente -> servidor pede a dificuldade e,

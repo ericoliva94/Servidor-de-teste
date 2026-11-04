@@ -23,12 +23,13 @@ const (
 
 // Tamanhos dos vetores de item, iguais aos do registro do personagem.
 const (
-	EquipSlots     = 16 // Equip: ARRAY [0..15] OF TItem
-	InventorySlots = 64 // Inventory: ARRAY [0..63] OF TItem
-	StorageSlots   = 86 // o LIMIT 86 da consulta de armazem
-	CashSlots      = 24 // o LIMIT 24 da consulta de premium
-	PranEquipSlots = 6
-	PranInvSlots   = 16
+	EquipSlots      = 16 // Equip: ARRAY [0..15] OF TItem
+	InventorySlots  = 64 // Inventory: ARRAY [0..63] OF TItem
+	StorageSlots    = 86 // o LIMIT 86 da consulta de armazem
+	CashSlots       = 24 // o LIMIT 24 da consulta de premium
+	GuildChestSlots = 50 // Chest.Items: ARRAY [0..49] OF TITEM
+	PranEquipSlots  = 6
+	PranInvSlots    = 16
 )
 
 // Items le a tabela items.
@@ -276,4 +277,25 @@ func (it Items) SaveEquip(ctx context.Context, charID uint32, set ItemSet) error
 // SaveInventory grava o inventario de um personagem.
 func (it Items) SaveInventory(ctx context.Context, charID uint32, set ItemSet) error {
 	return it.SaveSet(ctx, charID, SlotTypeInventory, set)
+}
+
+// SaveStorage grava o armazem de uma conta.
+//
+// A origem gravava o armazem dentro de TPlayer.SaveInGame, junto do
+// personagem, com o id da CONTA como owner_id e slot_type 2.
+func (it Items) SaveStorage(ctx context.Context, accountID uint32, set ItemSet) error {
+	return it.SaveSet(ctx, accountID, SlotTypeStorage, set)
+}
+
+// GuildChest le os itens do bau de uma guilda.
+//
+// owner e o INDICE da guilda, nao o slot dela no vetor global: e o que a
+// origem gravava em owner_id (Functions.pas:876, "Guilds[i].Index").
+func (it Items) GuildChest(ctx context.Context, guildIndex uint32) (ItemSet, error) {
+	return it.ByOwner(ctx, guildIndex, SlotTypeGuildChest, GuildChestSlots)
+}
+
+// SaveGuildChest grava os itens do bau de uma guilda.
+func (it Items) SaveGuildChest(ctx context.Context, guildIndex uint32, set ItemSet) error {
+	return it.SaveSet(ctx, guildIndex, SlotTypeGuildChest, set)
 }

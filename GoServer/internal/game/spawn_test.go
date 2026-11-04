@@ -669,8 +669,10 @@ func TestEntryPositionInvalidaCaiNoPadrao(t *testing.T) {
 type itensFalsos struct {
 	equip map[uint32]store.ItemSet
 	inv   map[uint32]store.ItemSet
+	arm   map[uint32]store.ItemSet
+	bau   map[uint32]store.ItemSet
 	erro  error
-	// gravados guarda o que SaveEquip e SaveInventory receberam.
+	// gravados guarda o que os Save* receberam.
 	gravados map[string]store.ItemSet
 }
 
@@ -708,8 +710,32 @@ func (f itensFalsos) SaveInventory(_ context.Context, id uint32, set store.ItemS
 	return f.erro
 }
 
-func (f itensFalsos) Storage(_ context.Context, _ uint32) (store.ItemSet, error) {
-	return store.ItemSet{Slots: make([]model.Item, store.StorageSlots)}, nil
+func (f itensFalsos) Storage(_ context.Context, id uint32) (store.ItemSet, error) {
+	if s, ok := f.arm[id]; ok {
+		return s, f.erro
+	}
+	return store.ItemSet{Slots: make([]model.Item, store.StorageSlots)}, f.erro
+}
+
+func (f itensFalsos) SaveStorage(_ context.Context, id uint32, set store.ItemSet) error {
+	if f.gravados != nil {
+		f.gravados[fmt.Sprintf("armazem:%d", id)] = set
+	}
+	return f.erro
+}
+
+func (f itensFalsos) GuildChest(_ context.Context, id uint32) (store.ItemSet, error) {
+	if s, ok := f.bau[id]; ok {
+		return s, f.erro
+	}
+	return store.ItemSet{Slots: make([]model.Item, store.GuildChestSlots)}, f.erro
+}
+
+func (f itensFalsos) SaveGuildChest(_ context.Context, id uint32, set store.ItemSet) error {
+	if f.gravados != nil {
+		f.gravados[fmt.Sprintf("bau:%d", id)] = set
+	}
+	return f.erro
 }
 
 func (f itensFalsos) Cash(_ context.Context, _ uint32) (store.ItemSet, error) {

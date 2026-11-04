@@ -59,6 +59,9 @@ type GuildStore interface {
 	All(ctx context.Context) ([]*guild.Guild, []string, error)
 	Save(ctx context.Context, g *guild.Guild) error
 	Delete(ctx context.Context, index uint16) error
+	// SaveChestGold grava so o ouro do bau: um UPDATE de uma coluna, para
+	// mover ouro nao reescrever a lista de membros inteira.
+	SaveChestGold(ctx context.Context, index uint16, gold uint64) error
 }
 
 // MailStore guarda o correio dos personagens.
@@ -108,19 +111,31 @@ type ItemSource interface {
 	Cash(ctx context.Context, accountID uint32) (store.ItemSet, error)
 	SaveEquip(ctx context.Context, charID uint32, set store.ItemSet) error
 	SaveInventory(ctx context.Context, charID uint32, set store.ItemSet) error
+	SaveStorage(ctx context.Context, accountID uint32, set store.ItemSet) error
+	// GuildChest e SaveGuildChest tomam o INDICE da guilda como dono, que e o
+	// que a origem gravava em owner_id com slot_type 3.
+	GuildChest(ctx context.Context, guildIndex uint32) (store.ItemSet, error)
+	SaveGuildChest(ctx context.Context, guildIndex uint32, set store.ItemSet) error
+}
+
+// StorageGoldStore grava o ouro do armazem da conta.
+type StorageGoldStore interface {
+	SaveStorageGold(ctx context.Context, accountID uint32, gold int64) error
 }
 
 // Handler atende os pacotes do canal.
 type Handler struct {
-	Channel   uint8
-	Accounts  auth.Accounts
-	Chars     Characters
-	Items     ItemSource
-	SkillDB   SkillStore
-	GuildDB   GuildStore
-	MailDB    MailStore
-	AuctionDB AuctionStore
-	Numerics  NumericStore
+	Channel  uint8
+	Accounts auth.Accounts
+	// AccountGold grava o ouro do armazem. Nil desliga a gravacao.
+	AccountGold StorageGoldStore
+	Chars       Characters
+	Items       ItemSource
+	SkillDB     SkillStore
+	GuildDB     GuildStore
+	MailDB      MailStore
+	AuctionDB   AuctionStore
+	Numerics    NumericStore
 	// Chan e o registro de quem esta conectado a este canal.
 	Chan *Channel
 	// Mobs e o mundo de mobs deste canal.
@@ -281,6 +296,14 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.requestEnterDungeon(ctx, c, s, p)
 	case CodeDungeonConfirm:
 		return h.confirmDungeon(ctx, c, s, p)
+	case CodeOpenNPC:
+		return h.openNPC(ctx, c, s, p)
+	case CodeCloseNPCOption:
+		return h.closeNPCOption(ctx, c, s, p)
+	case CodeChangeChestGold:
+		return h.changeChestGold(ctx, c, s, p)
+	case CodeCloseGuildChest:
+		return h.closeGuildChest(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta
@@ -402,6 +425,7 @@ func (h *Handler) OnDisconnect(c *netsrv.Conn) {
 		// Gravar antes de tirar da lista: os itens mudaram em memoria e nada
 		// mais vai ler esta sessao depois daqui.
 		h.saveItems(s)
+		h.chestOnDisconnect(s)
 		h.guildOnDisconnect(s)
 		h.dungeonOnDisconnect(s)
 		h.leaveParty(s)
@@ -552,6 +576,18 @@ func (h *Handler) saveItems(s *Session) {
 		if err := h.Items.SaveInventory(ctx, charID, s.Inventory); err != nil {
 			h.log().Error("gravar inventario",
 				"usuario", s.Username, "personagem", charID, "erro", err)
+		}
+	}
+	if h.Items != nil && len(s.Storage.Slots) > 0 && s.Account.ID != 0 {
+		if err := h.Items.SaveStorage(ctx, s.Account.ID, s.Storage); err != nil {
+			h.log().Error("gravar armazem",
+				"usuario", s.Username, "conta", s.Account.ID, "erro", err)
+		}
+	}
+	if h.AccountGold != nil && s.Account.ID != 0 {
+		if err := h.AccountGold.SaveStorageGold(ctx, s.Account.ID, s.StorageGold); err != nil {
+			h.log().Error("gravar ouro do armazem",
+				"usuario", s.Username, "conta", s.Account.ID, "erro", err)
 		}
 	}
 	if h.SkillDB != nil {

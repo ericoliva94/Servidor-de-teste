@@ -90,6 +90,8 @@ func run() error {
 		auctionDB game.AuctionStore
 		numerics  game.NumericStore
 		tokens    tokensrv.Store
+		// contaOuro grava o ouro do armazem; nil sem banco.
+		contaOuro game.StorageGoldStore
 	)
 	if *skipDB {
 		log.Warn("subindo sem banco: nenhum login sera aceito")
@@ -119,6 +121,7 @@ func run() error {
 		accs := store.Accounts{DB: db}
 		accounts = accs
 		tokens = accs
+		contaOuro = accs
 		cs := store.Characters{DB: db}
 		chars = cs
 		numerics = cs
@@ -205,6 +208,7 @@ func run() error {
 		Channel:        0,
 		Chan:           canal,
 		Accounts:       accounts,
+		AccountGold:    contaOuro,
 		Chars:          chars,
 		Items:          items,
 		SkillDB:        skillDB,
@@ -330,6 +334,7 @@ func run() error {
 
 	go auctionLoop(ctx, canalHandler, log)
 	go dungeonLoop(ctx, canalHandler, log)
+	go chestLoop(ctx, canalHandler)
 
 	tarefas := 2
 	errc := make(chan error, 4)
@@ -456,6 +461,25 @@ func dungeonLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
 	}
 }
 
+// chestInterval e o passo com que o servidor confere os baus de guilda
+// abertos. A origem usava "Sleep(50)" dentro de uma thread POR BAU ABERTO,
+// o que para um prazo de dois minutos e 2400 voltas de laco por bau.
+const chestInterval = 15 * time.Second
+
+// chestLoop fecha os baus de guilda sem acao.
+func chestLoop(ctx context.Context, h *game.Handler) {
+	t := time.NewTicker(chestInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			h.ChestTick()
+		}
+	}
+}
+
 // auctionLoop devolve ao vendedor os itens das ofertas que venceram.
 //
 // A origem tinha TAuctionFunctions.CheckAuctionItems, cujo corpo e so
@@ -529,6 +553,14 @@ func (noItems) SaveEquip(context.Context, uint32, store.ItemSet) error { return 
 
 func (noItems) SaveInventory(context.Context, uint32, store.ItemSet) error { return nil }
 
+func (noItems) SaveStorage(context.Context, uint32, store.ItemSet) error { return nil }
+
+func (noItems) GuildChest(context.Context, uint32) (store.ItemSet, error) {
+	return store.ItemSet{Slots: make([]model.Item, store.GuildChestSlots)}, nil
+}
+
+func (noItems) SaveGuildChest(context.Context, uint32, store.ItemSet) error { return nil }
+
 // noSkills devolve arvore vazia. Usado com -no-db.
 type noSkills struct{}
 
@@ -548,6 +580,8 @@ func (noGuilds) All(context.Context) ([]*guild.Guild, []string, error) {
 func (noGuilds) Save(context.Context, *guild.Guild) error { return nil }
 
 func (noGuilds) Delete(context.Context, uint16) error { return nil }
+
+func (noGuilds) SaveChestGold(context.Context, uint16, uint64) error { return nil }
 
 // noAccounts recusa todo login. Usado com -no-db.
 type noAccounts struct{}

@@ -24,7 +24,8 @@ func (a Accounts) ByUsername(ctx context.Context, username string) (auth.Account
 		SELECT id, username, password_hash, last_token,
 		       COALESCE(last_token_creation_time, 0) AS last_token_creation_time,
 		       account_status, nation, ban_days,
-		       COALESCE(account_type, 0) AS account_type
+		       COALESCE(account_type, 0) AS account_type,
+		       COALESCE(storage_gold, 0) AS storage_gold
 		  FROM accounts
 		 WHERE username = :username
 		 LIMIT 1`
@@ -52,9 +53,10 @@ func (a Accounts) ByUsername(ctx context.Context, username string) (auth.Account
 		pwHash       sql.NullString
 		banDays      int64
 		accType      int64
+		storageGold  int64
 	)
 	if err := rows.Scan(&acc.ID, &user, &pwHash, &token, &tokenCreated,
-		&status, &nation, &banDays, &accType); err != nil {
+		&status, &nation, &banDays, &accType, &storageGold); err != nil {
 		return auth.Account{}, false, fmt.Errorf("store: ler conta: %w", err)
 	}
 	if err := rows.Err(); err != nil {
@@ -74,6 +76,11 @@ func (a Accounts) ByUsername(ctx context.Context, username string) (auth.Account
 	acc.Nation = clampToByte(nation)
 	acc.BanDays = int(banDays)
 	acc.Type = clampToByte(accType)
+	// A origem lia storage_gold com AsInteger (32 bits) num campo Int64: um
+	// armazem com mais de 2.147.483.647 de ouro voltava do banco truncado, e
+	// acima de 4.294.967.295 voltava negativo. Aqui o valor vem inteiro e
+	// so o negativo, que nao existe em jogo, e cortado.
+	acc.StorageGold = max(storageGold, 0)
 	return acc, true, nil
 }
 
@@ -108,6 +115,29 @@ func (a Accounts) SaveToken(ctx context.Context, accountID uint32, token string,
 		sql.Named("id", accountID))
 	if err != nil {
 		return fmt.Errorf("store: gravar token: %w", err)
+	}
+	return nil
+}
+
+// SaveStorageGold grava o ouro do armazem de uma conta.
+//
+// A origem gravava este campo no mesmo UPDATE gigante do personagem, montado
+// por concatenacao de texto (Player.pas:2661), e so quando TPlayer.SaveInGame
+// era chamado: quem movia ouro para o armazem e caia antes da proxima
+// gravacao perdia o deposito.
+func (a Accounts) SaveStorageGold(ctx context.Context, accountID uint32, gold int64) error {
+	if accountID == 0 {
+		return fmt.Errorf("store: gravar ouro de armazem sem conta")
+	}
+	const q = `
+		UPDATE accounts
+		   SET storage_gold = :ouro
+		 WHERE id = :id`
+	_, err := a.DB.Exec(ctx, q,
+		sql.Named("ouro", max(gold, 0)),
+		sql.Named("id", accountID))
+	if err != nil {
+		return fmt.Errorf("store: gravar ouro de armazem: %w", err)
 	}
 	return nil
 }

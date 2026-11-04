@@ -44,6 +44,9 @@ type Account struct {
 	// Type e a coluna account_type: o TAccountType de PlayerData.pas, que
 	// decide quem pode usar comando de GM.
 	Type uint8
+	// StorageGold e a coluna storage_gold: o ouro guardado no armazem, que na
+	// origem era TStoragePlayer.Gold, um Int64 do registro da conta.
+	StorageGold int64
 }
 
 // Niveis de conta, o TAccountType de PlayerData.pas:11.

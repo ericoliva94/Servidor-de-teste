@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS guilds (
   bravure_points    INT UNSIGNED NOT NULL DEFAULT 0,
   skill_points      INT UNSIGNED NOT NULL DEFAULT 0,
   promote           TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  storage_gold      BIGINT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
   UNIQUE KEY uniq_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -126,3 +127,15 @@ CREATE TABLE IF NOT EXISTS auction_offers (
   KEY idx_active (active, listed_at),
   KEY idx_seller (seller_char_index, active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Ouro do armazem da conta e do bau da guilda.
+--
+-- A origem ja usava as duas colunas (accounts.storage_gold e
+-- guilds.storage_gold) e os itens dos dois ficavam na tabela items, com
+-- slot_type 2 (armazem, owner_id = id da conta) e 3 (bau, owner_id = indice
+-- da guilda). Rode estes ALTER se o banco vier de uma instalacao que nao as
+-- tenha; num banco que ja as tenha o comando falha com "Duplicate column" e
+-- pode ser ignorado.
+--
+--   ALTER TABLE accounts ADD COLUMN storage_gold BIGINT NOT NULL DEFAULT 0;
+--   ALTER TABLE guilds   ADD COLUMN storage_gold BIGINT UNSIGNED NOT NULL DEFAULT 0;

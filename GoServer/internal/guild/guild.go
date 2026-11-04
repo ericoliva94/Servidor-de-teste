@@ -103,6 +103,11 @@ type Guild struct {
 	Members [MaxMembers]Member
 	// RanksConfig guarda os bits de permissao de cada rank.
 	RanksConfig [MaxRanks]uint8
+
+	// Chest e o bau da guilda. E ponteiro para o mutex de dentro dele nao
+	// tornar a guilda inteira nao-copiavel; Registry.Create e Registry.Put
+	// garantem que toda guilda do registro tem o seu.
+	Chest *Chest
 }
 
 // Capacity devolve quantos membros a guilda aguenta no nivel atual.
@@ -428,6 +433,7 @@ func (r *Registry) Create(nome string, nation uint8, leader Member) (*Guild, err
 		Nation:   nation,
 		Name:     nome,
 		LeaderID: leader.CharIndex,
+		Chest:    NewChest(),
 	}
 	// O mestre entra no rank 0 com todas as permissoes.
 	leader.Rank = RankLeader
@@ -454,6 +460,9 @@ func (r *Registry) Put(g *Guild) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if g.Chest == nil {
+		g.Chest = NewChest()
+	}
 	r.byIndex[g.Index] = g
 	if n := normalize(g.Name); n != "" {
 		r.byName[n] = g.Index

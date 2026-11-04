@@ -198,6 +198,7 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	// 2 lia os itens de Characters[1], que esta vazio, e o personagem do slot
 	// 2 entrava sem equipamento.
 	equip, inventario := h.loadItems(ctx, s, src.ID)
+	armazem := h.loadStorage(ctx, s)
 	skills := h.loadSkills(ctx, s, src.ID)
 
 	var pkt packets.SendToWorldPacket
@@ -240,6 +241,10 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	s.SelectedSlot = slot
 	s.Equip = equip
 	s.Inventory = inventario
+	s.Storage = armazem
+	// O armazem e da conta, entao o ouro dele vem do registro da conta e nao
+	// do personagem. A origem lia o mesmo campo (accounts.storage_gold).
+	s.StorageGold = s.Account.StorageGold
 	s.Skills = skills
 	s.Avatar = AvatarFromCharacter(src, uint16(s.Account.Nation))
 	s.Avatar.SetEquip(equip)
@@ -355,6 +360,35 @@ func (h *Handler) loadItems(ctx context.Context, s *Session, charID uint32) (equ
 		h.log().Warn("itens", "personagem", charID, "aviso", a)
 	}
 	return equip, inv
+}
+
+// loadStorage le o armazem da conta.
+//
+// O dono e a CONTA: na origem o armazem ficava em Account.Header.Storage e
+// era compartilhado por todos os personagens dela, com owner_id = id da conta
+// e slot_type 2 na tabela items.
+func (h *Handler) loadStorage(ctx context.Context, s *Session) store.ItemSet {
+	vazio := store.ItemSet{Slots: make([]model.Item, store.StorageSlots)}
+	if h.Items == nil || s.Account.ID == 0 {
+		return vazio
+	}
+	set, err := h.Items.Storage(ctx, s.Account.ID)
+	if err != nil {
+		h.log().Error("carregar armazem",
+			"conta", s.Account.ID, "usuario", s.Username, "erro", err)
+		return vazio
+	}
+	for _, a := range set.Avisos {
+		h.log().Warn("armazem", "conta", s.Account.ID, "aviso", a)
+	}
+	if len(set.Slots) < store.StorageSlots {
+		// Um conjunto curto faria o resolveSlot recusar slots validos; melhor
+		// completar do que depender do tamanho que veio.
+		completo := make([]model.Item, store.StorageSlots)
+		copy(completo, set.Slots)
+		set.Slots = completo
+	}
+	return set
 }
 
 // loadSkills le a arvore de skills do personagem.

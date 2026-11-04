@@ -116,6 +116,12 @@ type Session struct {
 	Equip     store.ItemSet
 	Inventory store.ItemSet
 
+	// Storage e o armazem da CONTA, nao do personagem: na origem era
+	// Account.Header.Storage, compartilhado por todos os personagens da
+	// conta. StorageGold e o Gold daquele mesmo registro.
+	Storage     store.ItemSet
+	StorageGold int64
+
 	// Skills e a arvore de habilidades do personagem.
 	Skills model.SkillsList
 	// UsingSkill e a skill em lancamento, zero quando nao ha nenhuma.

@@ -55,11 +55,11 @@ func inventoryBagSlot(slot int) int {
 	return -1
 }
 
-// moveItem e o porte da parte de TPacketHandlers.MoveItem ($70F) que trata
-// inventario e equipamento.
+// moveItem e o porte de TPacketHandlers.MoveItem ($70F) para inventario,
+// equipamento, armazem e bau de guilda.
 //
-// Armazem, bau de guilda e pran dependem de sistemas que ainda nao estao
-// portados e sao recusados aqui; ver GoServer/PORTE.md.
+// Pran depende de um sistema que ainda nao esta portado e e recusado aqui;
+// ver GoServer/PORTE.md.
 //
 // A origem iniciava srcItem e destItem em nil e so os preenchia dentro dos
 // ramos do case. Um SrcType ou DestType fora da lista deixava o ponteiro nil
@@ -83,6 +83,13 @@ func (h *Handler) moveItem(ctx context.Context, c *netsrv.Conn, s *Session, p pr
 	}
 	if pkt.DestType == store.SlotTypeEquip && pkt.SrcType != store.SlotTypeInventory {
 		return nil
+	}
+
+	// O bau da guilda e compartilhado: o movimento dele acontece todo com o
+	// bau travado, num caminho proprio, para dois membros nao levarem o mesmo
+	// item. Ver moveGuildChestItem.
+	if pkt.SrcType == store.SlotTypeGuildChest || pkt.DestType == store.SlotTypeGuildChest {
+		return h.moveGuildChestItem(ctx, c, s, pkt)
 	}
 
 	src, err := h.resolveSlot(c, s, int(pkt.SrcType), int(pkt.SrcSlot), true)
@@ -118,12 +125,7 @@ func (h *Handler) moveItem(ctx context.Context, c *netsrv.Conn, s *Session, p pr
 	equipando := pkt.DestType == store.SlotTypeEquip
 	desequipando := pkt.SrcType == store.SlotTypeEquip
 
-	// Pilhas iguais e empilhaveis se juntam em vez de trocar de lugar.
-	if src.Index == dest.Index && itemfn.CanAgroup(h.data(), dest.Index) {
-		itemfn.Agroup(h.data(), src, dest)
-	} else {
-		*src, *dest = *dest, *src
-	}
+	h.trocarOuEmpilhar(src, dest)
 
 	h.sendRefreshItem(c, s, uint8(pkt.DestType), pkt.DestSlot, *dest)
 	h.sendRefreshItem(c, s, uint8(pkt.SrcType), pkt.SrcSlot, *src)
@@ -138,6 +140,38 @@ func (h *Handler) moveItem(ctx context.Context, c *netsrv.Conn, s *Session, p pr
 		}
 	}
 	return nil
+}
+
+// trocarOuEmpilhar junta duas pilhas iguais ou troca os dois slots.
+//
+// A origem repetia este par de ramos em cada combinacao de tipo de slot.
+func (h *Handler) trocarOuEmpilhar(src, dest *model.Item) {
+	if src.Index == dest.Index && itemfn.CanAgroup(h.data(), dest.Index) {
+		itemfn.Agroup(h.data(), src, dest)
+		return
+	}
+	*src, *dest = *dest, *src
+}
+
+// itemPortado recusa os itens cujo sistema ainda nao esta portado e devolve a
+// mensagem para o cliente.
+//
+// A origem spawnava o bicho dentro do MoveItem; sem o sistema, equipar o item
+// nao produziria nada.
+func (h *Handler) itemPortado(itens ...model.Item) (string, bool) {
+	t := h.data()
+	for _, it := range itens {
+		if it.IsEmpty() {
+			continue
+		}
+		switch itemfn.ItemType(t, it.Index) {
+		case itemfn.ItemTypePran:
+			return "Pran ainda nao esta disponivel neste servidor.", false
+		case itemfn.ItemTypePet:
+			return "Mascote ainda nao esta disponivel neste servidor.", false
+		}
+	}
+	return "", true
 }
 
 // slotMudaAparencia diz se o slot aparece no boneco. Na origem eram os slots
@@ -177,6 +211,35 @@ func (h *Handler) resolveSlot(c *netsrv.Conn, s *Session, tipo, slot int, origem
 		}
 		return &s.Equip.Slots[slot], nil
 
+	case store.SlotTypeStorage:
+		// A origem exigia a janela aberta so no lado de DESTINO; ver
+		// storageOpen em storage.go.
+		if !storageOpen(s) {
+			return nil, ErrStorageClosed
+		}
+		if slot < 0 {
+			return nil, ErrSlotInvalido
+		}
+		if slot >= StorageItemSlots {
+			// 84 e 85 sao a central de pran, que a origem so deixava receber
+			// item de ItemType 10 — e o pran nao esta portado. 80..83 sao as
+			// expansoes, que a origem nao deixava arrastar.
+			if slot == StorageFirstPranSlot || slot == StorageLastPranSlot {
+				return nil, ErrPranNotPorted
+			}
+			return nil, ErrSlotInvalido
+		}
+		// A expansao que cobre o slot tem de estar no armazem, como na origem
+		// ("if Storage.Itens[SrcBag].Index <= 0 then Exit").
+		bolsa := storageBagSlot(slot)
+		if bolsa < 0 || s.Storage.Get(bolsa).IsEmpty() {
+			return nil, ErrStorageBagEmpty
+		}
+		if slot >= len(s.Storage.Slots) {
+			return nil, ErrSlotInvalido
+		}
+		return &s.Storage.Slots[slot], nil
+
 	default:
 		return nil, ErrTipoSlotInvalido
 	}
@@ -184,23 +247,10 @@ func (h *Handler) resolveSlot(c *netsrv.Conn, s *Session, tipo, slot int, origem
 
 // podeTrocar aplica as regras de equipar da origem.
 func (h *Handler) podeTrocar(c *netsrv.Conn, s *Session, pkt packets.MoveItemPacket, src, dest model.Item) bool {
-	t := h.data()
-
-	// Pran e mascote dependem de sistemas que ainda nao estao portados: a
-	// origem spawnava o bicho aqui dentro. Recusar e melhor que equipar um
-	// item que nao vai produzir nada.
-	for _, it := range []model.Item{src, dest} {
-		if it.IsEmpty() {
-			continue
-		}
-		switch itemfn.ItemType(t, it.Index) {
-		case itemfn.ItemTypePran:
-			h.message(c, "Pran ainda nao esta disponivel neste servidor.")
-			return false
-		case itemfn.ItemTypePet:
-			h.message(c, "Mascote ainda nao esta disponivel neste servidor.")
-			return false
-		}
+	// Pran e mascote dependem de sistemas que ainda nao estao portados.
+	if m, pode := h.itemPortado(src, dest); !pode {
+		h.message(c, m)
+		return false
 	}
 
 	// Do inventario para o equipamento.
