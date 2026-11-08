@@ -85,6 +85,8 @@ func (h *Handler) attack(ctx context.Context, c *netsrv.Conn, s *Session, p prot
 		return nil
 	}
 	s.LastAttack = agora
+	s.AtkAnim = uint8(pkt.Anim)
+	s.AtkSkill = 0
 
 	// Dentro de uma dungeon o alvo e um mob da instancia, cujo id vem do
 	// MobsPosition e cai na faixa reservada a NPC (2048..3047), nao na dos
@@ -173,9 +175,78 @@ func (h *Handler) hitMob(c *netsrv.Conn, s *Session, mobID uint16) error {
 
 	if morreu {
 		h.onMobDeath(c, s, m, sp)
+	} else if h.procSetSkill(s, m, rnd) {
+		h.onMobDeath(c, s, m, sp)
 	}
 	h.wearWeapon(c, s)
 	return nil
+}
+
+// procSetSkill porta Effect5Skill de BaseMob.pas: com o efeito EF_CALLSKILL do
+// conjunto vestido, um golpe tem chance de disparar a skill do conjunto (no
+// Cometa Ardente, a Estrela Cadente) como um segundo golpe no mesmo alvo.
+//
+// A chance e RATE_EFFECT5 vezes o tamanho de EFF_5 (3), como na origem.
+// Devolve true quando o golpe da skill matou o mob. So skills de alvo unico
+// (TargetType 21) sao tratadas, que e o ramo que a origem usa aqui.
+func (h *Handler) procSetSkill(s *Session, m *Mob, rnd interface{ IntN(int) int }) bool {
+	var lista []uint16
+	for _, sk := range s.Avatar.CallSkills {
+		if sk != 0 {
+			lista = append(lista, sk)
+		}
+	}
+	if len(lista) == 0 || h.SkillTable == nil {
+		return false
+	}
+	taxa := int(h.RateEffect5)
+	if taxa == 0 {
+		taxa = 10
+	}
+	if rnd.IntN(100)+1 > taxa*len(s.Avatar.CallSkills) {
+		return false
+	}
+	skill := lista[rnd.IntN(len(lista))]
+	d := h.SkillTable.Skill(int(skill))
+	if d == nil || d.TargetType != 21 {
+		return false
+	}
+
+	dano := (int(s.Avatar.AtkFis) + int(s.Avatar.AtkMag)) / 3
+	dano += int(d.Damage)
+	if d.Adicional > 0 {
+		dano *= 2
+	}
+	if dano > 20000 {
+		dano = 20000
+	}
+	dano += 20 + rnd.IntN(180)
+
+	morreu := h.Mobs.Hit(m, dano, s.ClientID, h.now())
+
+	// A animacao vai no byte baixo, como o "Packet.Animation := SkillData[].Anim"
+	// da origem (Anim e DWORD, Animation e Byte).
+	antSkill, antAnim := s.AtkSkill, s.AtkAnim
+	s.AtkSkill, s.AtkAnim = uint32(skill), uint8(d.Anim)
+	h.broadcastMobDamage(s, m, combat.Critical, dano)
+	s.AtkSkill, s.AtkAnim = antSkill, antAnim
+	return morreu
+}
+
+// fillAnimation preenche no $102 o que o cliente usa para tocar o golpe.
+//
+// Porte de TBaseMob.SendDamage: SkillID e Animation vinham do pedido do
+// cliente e MobAnimation de SkillData[Skill].TargetAnimation. O Go deixava os
+// tres em zero, e o cliente nao animava o ataque.
+func (h *Handler) fillAnimation(pkt *packets.RecvDamagePacket, s *Session) {
+	pkt.SkillID = s.AtkSkill
+	pkt.Animation = s.AtkAnim
+	if h.SkillTable == nil {
+		return
+	}
+	if d := h.SkillTable.Skill(int(s.AtkSkill)); d != nil {
+		pkt.MobAnimation = uint8(d.TargetAnimation)
+	}
 }
 
 // broadcastMobDamage manda o $102 do golpe num mob a quem ve o mob.
@@ -190,6 +261,7 @@ func (h *Handler) broadcastMobDamage(s *Session, m *Mob, tipo combat.DamageType,
 	pkt.AttackerPos.X = s.Position.X
 	pkt.AttackerPos.Y = s.Position.Y
 	pkt.TargetID = m.ClientID
+	h.fillAnimation(&pkt, s)
 	pkt.DNType = uint8(tipo)
 	pkt.DANO = uint64(max(dano, 0))
 	pkt.MobCurrHP = m.CurHP
@@ -222,6 +294,7 @@ func (h *Handler) broadcastMobDamage(s *Session, m *Mob, tipo combat.DamageType,
 // FirstPlayerAttacker. Mantido: a experiencia vai para quem matou.
 func (h *Handler) onMobDeath(c *netsrv.Conn, s *Session, m *Mob, sp *mobdata.Species) {
 	ganho := h.addExp(c, s, int64(sp.Exp), ExpTypeMob)
+	h.awardPranExp(c, s, ganho)
 	h.dropFromMob(c, s, m, sp.DropIndex)
 	h.log().Debug("mob morto",
 		"mob", sp.Name, "id", m.ClientID,
@@ -271,6 +344,10 @@ func (h *Handler) resolveAttackTarget(s *Session, index uint16) (*Session, error
 	if !ok || alvo.Status < Playing || alvo.Dead {
 		return nil, ErrSlotInvalido
 	}
+	// Em duelo so o oponente pode ser atacado, e so depois da espera de 15 s.
+	if s.Duel.active && (index != s.Duel.with || h.duelWaiting(s)) {
+		return nil, ErrSlotInvalido
+	}
 	// O alvo tem de estar a vista: a origem aceitava qualquer ClientID.
 	if !s.Position.InRange(alvo.Position, AttackRange) {
 		return nil, ErrSlotInvalido
@@ -304,11 +381,13 @@ func (h *Handler) resolveHit(c *netsrv.Conn, s *Session, alvo *Session) {
 	if dano > 0 {
 		alvoAlvo := &sessionTarget{s: alvo, h: h}
 		autorAlvo := &sessionTarget{s: s, h: h}
-		res := combat.ApplyToTarget(dano, tipo, alvoAlvo, autorAlvo, nil)
+		res := combat.ApplyToTarget(dano, tipo, alvoAlvo, autorAlvo, &alvo.DefesaPoints)
 		dano, tipo = res.Damage, res.Type
 		if res.Reflected > 0 {
 			h.applyDamage(s, res.Reflected)
 		}
+		dano = h.divineUnion(alvo, dano)
+		dano = h.reactiveHit(s, alvo, dano, tipo, tipo != combat.Miss)
 	}
 
 	if dano > 0 {
@@ -365,6 +444,11 @@ func (h *Handler) applyDamage(s *Session, dano int) {
 	if dano <= 0 {
 		return
 	}
+	// Em duelo ninguem morre: o golpe que mataria deixa 10 de vida e o duelo acaba.
+	if s.Duel.active && uint32(dano) >= s.Avatar.CurHP {
+		s.Avatar.CurHP = duelEndHP
+		return
+	}
 	if uint32(dano) >= s.Avatar.CurHP {
 		s.Avatar.CurHP = 0
 		s.Dead = true
@@ -382,6 +466,7 @@ func (h *Handler) broadcastDamage(s, alvo *Session, tipo combat.DamageType, dano
 	pkt.AttackerPos.X = s.Position.X
 	pkt.AttackerPos.Y = s.Position.Y
 	pkt.TargetID = alvo.ClientID
+	h.fillAnimation(&pkt, s)
 	pkt.DNType = uint8(tipo)
 	pkt.DANO = uint64(max(dano, 0))
 	pkt.MobCurrHP = alvo.Avatar.CurHP
@@ -484,7 +569,7 @@ func (h *Handler) revive(ctx context.Context, c *netsrv.Conn, s *Session, p prot
 	// A origem devolvia o jogador com a vida cheia.
 	s.Avatar.CurHP = s.Avatar.MaxHP
 	s.Avatar.CurMP = s.Avatar.MaxMP
-	s.Base.Buffs.Clear()
+	h.clearBuffs(s)
 
 	if err := h.resync(s); err != nil {
 		return err
@@ -540,14 +625,14 @@ func (t *sessionTarget) HasBuff(index uint16) bool {
 }
 
 func (t *sessionTarget) RemoveBuff(index uint16) {
-	t.s.Base.Buffs.Remove(index)
+	t.h.removeBuffAndNotify(t.s, index)
 }
 
 // Ability devolve zero: o acumulador de efeitos (GetMobAbility) depende de
 // equipamento, buff e skill, que ainda nao estao portados.
-func (t *sessionTarget) Ability(int) int { return 0 }
+func (t *sessionTarget) Ability(eff int) int { return t.s.Avatar.Ability.get(eff) }
 
-func (t *sessionTarget) DecAbility(int, int) {}
+func (t *sessionTarget) DecAbility(eff, v int) { t.s.Avatar.Ability.decrease(eff, v) }
 
 func (t *sessionTarget) Notify(msg string) {
 	if t.h == nil || t.h.Chan == nil {

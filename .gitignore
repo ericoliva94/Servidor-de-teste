@@ -36,3 +36,8 @@ __pycache__/
 node_modules/
 *.lnk
 desktop.ini
+
+# ---- Binarios e logs locais do servidor Go ----
+Server/Bin/aikaserver_go*.exe
+Server/Bin/*.err
+Server/Bin/Iniciar_GoServer.bat

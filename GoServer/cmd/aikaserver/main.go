@@ -7,6 +7,10 @@
 package main
 
 import (
+	"aika/internal/charcreate"
+	"aika/internal/devir"
+	nationpkg "aika/internal/nation"
+	pranpkg "aika/internal/pran"
 	"context"
 	"errors"
 	"flag"
@@ -30,8 +34,10 @@ import (
 	"aika/internal/mobdata"
 	"aika/internal/model"
 	"aika/internal/netsrv"
+	"aika/internal/serverlist"
 	"aika/internal/skillfn"
 	"aika/internal/store"
+	"aika/internal/titledata"
 	"aika/internal/tokensrv"
 )
 
@@ -44,14 +50,21 @@ func main() {
 
 func run() error {
 	var (
-		iniPath  = flag.String("ini", "AikaServer.ini", "caminho do AikaServer.ini")
-		dataDir  = flag.String("data", dataDirDefault(), "pasta com as tabelas .bin")
-		logLevel = flag.String("log", "info", "nivel de log: debug, info, warn, error")
-		skipDB   = flag.Bool("no-db", false, "sobe sem banco (so para conferir a carga)")
+		iniPath       = flag.String("ini", "AikaServer.ini", "caminho do AikaServer.ini")
+		dataDir       = flag.String("data", dataDirDefault(), "pasta com as tabelas .bin")
+		logLevel      = flag.String("log", "info", "nivel de log: debug, info, warn, error")
+		skipDB        = flag.Bool("no-db", false, "sobe sem banco (so para conferir a carga)")
+		nation        = flag.Int("nation", 1, "nacao deste servidor (define os 5 templos de reliquia: nacao 1 = devir 1..5)")
+		testeMutantes = flag.Bool("teste-mutantes", false, "MODO DE TESTE: mutantes do nivel 60 (Planta Carnivora, Croshu, Buto) sempre deixam um acessorio e ficam com defesa reduzida")
+		testeDefMax   = flag.Uint("teste-def-max", 700, "no modo de teste, teto da defesa fisica e magica desses mutantes")
+		trace         = flag.Bool("trace", false, "registra todo pacote enviado e recebido (volume alto; para achar o pacote que trava o cliente)")
+		multiCanal    = flag.Bool("multicanal", false, "sobe todos os canais do Channels do .ini, cada um no IP do SL.bin (porta 8822); sem esta opcao sobe um canal so, em :8822")
+		slPath        = flag.String("sl", "", "caminho do SL.bin (padrao: ao lado da pasta de dados)")
 	)
 	flag.Parse()
 
 	log := newLogger(*logLevel)
+	netsrv.SetTrace(*trace)
 	slog.SetDefault(log)
 
 	cfg, err := config.LoadServer(*iniPath)
@@ -71,6 +84,14 @@ func run() error {
 	for _, t := range tables.Loaded {
 		log.Info("tabela carregada", "detalhe", t.String())
 	}
+	titleTable, err := titledata.Load(*dataDir)
+	if err != nil {
+		log.Warn("titulos indisponiveis", "erro", err)
+	}
+	for _, w := range tables.MakeWarnings {
+		log.Warn("fabricacao: linha ignorada", "detalhe", w)
+	}
+	log.Info("receitas de fabricacao", "receitas", len(tables.MakeItems), "ingredientes", len(tables.MakeIngredients))
 	if len(tables.Missing) > 0 {
 		// Arquivo ausente e aviso, nao erro: o Delphi tambem seguia em frente.
 		log.Warn("tabelas ausentes", "arquivos", tables.Missing)
@@ -81,15 +102,31 @@ func run() error {
 	defer stop()
 
 	var (
-		accounts  auth.Accounts
-		chars     game.Characters
-		items     game.ItemSource
-		skillDB   game.SkillStore
-		guildDB   game.GuildStore
-		mailDB    game.MailStore
-		auctionDB game.AuctionStore
-		numerics  game.NumericStore
-		tokens    tokensrv.Store
+		accounts      auth.Accounts
+		chars         game.Characters
+		items         game.ItemSource
+		skillDB       game.SkillStore
+		guildDB       game.GuildStore
+		mailDB        game.MailStore
+		auctionDB     game.AuctionStore
+		friendDB      game.FriendStore
+		couponDB      game.CouponStore
+		pranDB        game.PranStore
+		titleDB       game.TitleStore
+		eventDB       game.EventStore
+		gmDB          game.GMStore
+		gmCmds        game.GMCommandStore
+		gmFounders    game.GMFounderStore
+		accountNation game.AccountNationStore
+		charSave      game.CharacterSaver
+		charDelete    game.CharacterDeleter
+		charCreate    game.CharacterCreator
+		devirDB       game.DevirStore
+		nationDB      game.NationStore
+		itemBarDB     game.ItemBarStore
+		teleportDB    game.TeleportStore
+		numerics      game.NumericStore
+		tokens        tokensrv.Store
 		// contaOuro grava o ouro do armazem e contaCash o saldo premium;
 		// nil sem banco.
 		contaOuro game.StorageGoldStore
@@ -126,6 +163,13 @@ func run() error {
 		contaOuro = accs
 		contaCash = accs
 		cs := store.Characters{DB: db}
+		itemBarDB = store.ItemBars{DB: db}
+		teleportDB = cs
+		charSave = cs
+		charDelete = cs
+		charCreate = cs
+		devirDB = store.Devires{DB: db}
+		nationDB = store.Nations{DB: db}
 		chars = cs
 		numerics = cs
 		items = store.Items{DB: db}
@@ -133,6 +177,15 @@ func run() error {
 		guildDB = store.Guilds{DB: db}
 		mailDB = store.Mails{DB: db}
 		auctionDB = store.Auctions{DB: db}
+		friendDB = store.Friends{DB: db}
+		couponDB = store.Coupons{DB: db}
+		pranDB = store.Prans{DB: db}
+		titleDB = store.Titles{DB: db}
+		eventDB = store.Events{DB: db}
+		gmDB = store.GMAccounts{DB: db}
+		gmCmds = store.GMAccounts{DB: db}
+		gmFounders = store.GMAccounts{DB: db}
+		accountNation = store.AccountNations{DB: db}
 	}
 
 	loginSrv := netsrv.New(netsrv.Config{
@@ -143,6 +196,10 @@ func run() error {
 	}, &auth.Handler{Accounts: accounts})
 
 	// Os mobs vem de dois CSV; ausencia e aviso, nao erro, como em Load.pas.
+	templates, avisosModelos := charcreate.Load(filepath.Join(*dataDir, "BaseAccs"))
+	for _, w := range avisosModelos {
+		log.Warn("modelo de personagem", "detalhe", w)
+	}
 	mobs, err := mobdata.Load(*dataDir)
 	if err != nil {
 		if errors.Is(err, mobdata.ErrNotFound) {
@@ -203,52 +260,154 @@ func run() error {
 	// disso apareceria sem guilda.
 	registroGuildas := guild.NewRegistry()
 
-	// O canal guarda quem esta conectado e aloca o ClientID. Sem ele o
-	// servidor atende o login mas ninguem ve ninguem.
-	canal := game.NewChannel(0, cfg.MaxUsers)
-
-	canalHandler := &game.Handler{
-		Channel:        0,
-		Chan:           canal,
-		Accounts:       accounts,
-		AccountGold:    contaOuro,
-		AccountCash:    contaCash,
-		Premium:        tables,
-		Chars:          chars,
-		Items:          items,
-		SkillDB:        skillDB,
-		GuildDB:        guildDB,
-		MailDB:         mailDB,
-		AuctionDB:      auctionDB,
-		Guilds:         registroGuildas,
-		SkillTable:     tables,
-		Numerics:       numerics,
-		Durations:      skillfn.BuffSeconds{T: tables},
-		Data:           tables,
-		WatchDistance:  cfg.DistanceToWatch,
-		ForgetDistance: cfg.DistanceToForget,
-		Log:            log,
-		ServerVersion:  uint16(cfg.Version),
-		Mobs:           mundoMobs,
-		Parties:        game.NewPartyRegistry(),
-		Drops:          drops,
-		MapObjs:        game.NewMapObjects(),
-		Dungeons:       dungeon.NewRegistry(),
-		DungeonLobbies: dungeon.NewLobbies(),
-		DropRateBonus:  cfg.DropRateBonus,
-		Exp:            tables,
-		ExpMultiplier:  cfg.ExpMultiplier,
-		MobEsquiva:     cfg.MobEsquiva,
-		MobCritRes:     cfg.MobCritRes,
-		MobDuploRes:    cfg.MobDuploRes,
+	// Onde cada canal escuta. Por padrao e um canal so, em :8822, como sempre.
+	// Com -multicanal sobem os do Channels do .ini, cada um no IP que o SL.bin da
+	// a ele, todos na porta 8822 (era assim em TServerSocket.StartServer).
+	canaisAddr := []string{cfg.ChannelAddr}
+	canaisNacao := []uint8{uint8(*nation)}
+	if *multiCanal && cfg.Channels > 1 {
+		caminho := *slPath
+		if caminho == "" {
+			caminho = filepath.Join(filepath.Dir(*dataDir), serverlist.FileName)
+		}
+		lista, err := serverlist.Load(caminho)
+		if err != nil {
+			return fmt.Errorf("-multicanal precisa do SL.bin: %w", err)
+		}
+		canaisAddr = canaisAddr[:0]
+		canaisNacao = canaisNacao[:0]
+		for i := 0; i < cfg.Channels; i++ {
+			if i >= len(lista) || !lista[i].Active() {
+				return fmt.Errorf("canal %d sem IP no %s", i, caminho)
+			}
+			canaisAddr = append(canaisAddr, lista[i].Addr())
+			canaisNacao = append(canaisNacao, uint8(lista[i].Nation))
+		}
+	} else if *multiCanal {
+		log.Warn("-multicanal com um canal so no .ini: nada a fazer", "canais", cfg.Channels)
 	}
 
-	channelSrv := netsrv.New(netsrv.Config{
-		Name:     "canal",
-		Addr:     cfg.ChannelAddr,
-		MaxConns: int(cfg.MaxUsers),
-		Log:      log,
-	}, canalHandler)
+	// Os canais dividem as guildas, as nacoes e a fila de troca de
+	// canal; cada um tem o proprio mundo (jogadores, mobs, grupos, itens no chao
+	// e dungeons).
+	nacoes := nationpkg.New()
+	trocas := game.NewHandoffs()
+	estadoCanal := func(id uint8) game.ChannelState {
+		if int(id) >= len(canaisAddr) {
+			return game.ChannelMissing
+		}
+		return game.ChannelUp
+	}
+
+	var mutantTest *game.MutantTest
+	if *testeMutantes {
+		mutantTest = game.NewMutantTest(mobs, drops, tables, uint32(*testeDefMax))
+		log.Warn("MODO DE TESTE LIGADO: mutantes do nivel 60 deixam sempre acessorio e tem defesa reduzida (reinicie sem -teste-mutantes para voltar ao normal)")
+		for _, linha := range mutantTest.Report {
+			log.Warn("modo de teste", "detalhe", linha)
+		}
+	}
+	novoHandler := func(idx int) *game.Handler {
+		mundo := mundoMobs
+		if idx > 0 {
+			mundo = game.NewMobWorld(mobs)
+		}
+		return &game.Handler{
+			Channel:        uint8(idx),
+			Chan:           game.NewChannel(uint8(idx), cfg.MaxUsers),
+			Handoffs:       trocas,
+			ChannelStatus:  estadoCanal,
+			Accounts:       accounts,
+			AccountGold:    contaOuro,
+			AccountCash:    contaCash,
+			Premium:        tables,
+			Chars:          chars,
+			Items:          items,
+			SkillDB:        skillDB,
+			GuildDB:        guildDB,
+			MailDB:         mailDB,
+			AuctionDB:      auctionDB,
+			FriendDB:       friendDB,
+			CouponDB:       couponDB,
+			PranDB:         pranDB,
+			PranIDs:        pranpkg.NewIDs(),
+			TitleDB:        titleDB,
+			EventDB:        eventDB,
+			GMDB:           gmDB,
+			GMCmds:         gmCmds,
+			GMFounders:     gmFounders,
+			Nation:         canaisNacao[idx],
+			AccountNation:  accountNation,
+			TitleTable:     titleTable,
+			CharSave:       charSave,
+			CharDelete:     charDelete,
+			CharCreate:     charCreate,
+			Devir:          devir.New(canaisNacao[idx]),
+			DevirDB:        devirDB,
+			Nations:        nacoes,
+			NationDB:       nationDB,
+			Templates:      templates,
+			ItemBarDB:      itemBarDB,
+			TeleportDB:     teleportDB,
+			Guilds:         registroGuildas,
+			SkillTable:     tables,
+			Numerics:       numerics,
+			Durations:      skillfn.BuffSeconds{T: tables},
+			Data:           tables,
+			WatchDistance:  cfg.DistanceToWatch,
+			ForgetDistance: cfg.DistanceToForget,
+			Log:            log,
+			ServerVersion:  uint16(cfg.Version),
+			Mobs:           mundo,
+			MutantTest:     mutantTest,
+			Parties:        game.NewPartyRegistry(),
+			Drops:          drops,
+			MapObjs:        game.NewMapObjects(),
+			Dungeons:       dungeon.NewRegistry(),
+			DungeonLobbies: dungeon.NewLobbies(),
+			DropRateBonus:  cfg.DropRateBonus,
+			Exp:            tables,
+			PranExp:        tables.PranExp,
+			ExpMultiplier:  cfg.ExpMultiplier,
+			RateEffect5:    cfg.RateEffect5,
+			MobEsquiva:     cfg.MobEsquiva,
+			MobCritRes:     cfg.MobCritRes,
+			MobDuploRes:    cfg.MobDuploRes,
+		}
+	}
+	var handlers []*game.Handler
+	var canais []*game.Channel
+	for i := range canaisAddr {
+		h := novoHandler(i)
+		handlers = append(handlers, h)
+		canais = append(canais, h.Chan)
+	}
+	canalHandler := handlers[0]
+	for _, h := range handlers {
+		h.Channels = handlers
+	}
+
+	for _, h := range handlers {
+		if err := h.LoadDevires(ctx); err != nil {
+			log.Error("carregar templos", "canal", h.Channel, "erro", err)
+		}
+	}
+	if err := canalHandler.LoadNations(ctx); err != nil {
+		log.Error("carregar nacoes", "erro", err)
+	}
+	var canalSrvs []*netsrv.Server
+	for i, h := range handlers {
+		nome := "canal"
+		if len(handlers) > 1 {
+			nome = fmt.Sprintf("canal %d", i)
+		}
+		canalSrvs = append(canalSrvs, netsrv.New(netsrv.Config{
+			Name:     nome,
+			Addr:     canaisAddr[i],
+			MaxConns: int(cfg.MaxUsers),
+			Log:      log,
+		}, h))
+	}
 
 	// Carrega as guildas depois de o banco estar de pe.
 	if guildDB != nil {
@@ -269,7 +428,7 @@ func run() error {
 
 	// Abre as portas antes de anunciar: o original so descobria falha de bind
 	// pelo log, depois de dizer que havia iniciado.
-	for _, srv := range []*netsrv.Server{loginSrv, channelSrv} {
+	for _, srv := range append([]*netsrv.Server{loginSrv}, canalSrvs...) {
 		if err := srv.Listen(); err != nil {
 			return err
 		}
@@ -283,7 +442,7 @@ func run() error {
 			Addr: cfg.TokenAddr,
 			Log:  log,
 		}, tokens, onlineCounter{
-			loginSrv: loginSrv, channelSrv: channelSrv, canal: canal})
+			loginSrv: loginSrv, channelSrvs: canalSrvs, canais: canais})
 		if err := tokenSrv.Listen(); err != nil {
 			return err
 		}
@@ -311,7 +470,7 @@ func run() error {
 
 	campos := []any{
 		"login", loginSrv.Addr().String(),
-		"canal", channelSrv.Addr().String(),
+		"canal", canalSrvs[0].Addr().String(),
 		"ver", cfg.DistanceToWatch,
 		"esquecer", cfg.DistanceToForget,
 	}
@@ -320,6 +479,13 @@ func run() error {
 	}
 	if consoleSrv != nil {
 		campos = append(campos, "console", consoleSrv.Address())
+	}
+	if len(canalSrvs) > 1 {
+		var todos []string
+		for _, s := range canalSrvs {
+			todos = append(todos, s.Addr().String())
+		}
+		campos = append(campos, "canais", todos)
 	}
 	log.Info("servidor pronto", campos...)
 
@@ -330,20 +496,25 @@ func run() error {
 	// O respawn de mob roda no servidor, nao dentro da visibilidade de um
 	// jogador: na origem o mob so voltava quando alguem passava perto, e sem
 	// ninguem por perto ele ficava morto indefinidamente.
-	go respawnLoop(ctx, canalHandler, log)
-	go mobAILoop(ctx, canalHandler, log)
-	go mapObjectLoop(ctx, canalHandler, log)
-	if dungeons != nil {
-		canalHandler.DungeonTable = dungeons
+	for _, h := range handlers {
+		if dungeons != nil {
+			h.DungeonTable = dungeons
+		}
+		// O que depende do mundo do canal roda uma vez por canal.
+		go respawnLoop(ctx, h, log)
+		go mobAILoop(ctx, h, log)
+		go mapObjectLoop(ctx, h, log)
+		go dungeonLoop(ctx, h, log)
+		go chestLoop(ctx, h)
+		go saveLoop(ctx, h, log)
+		go buffLoop(ctx, h)
 	}
-
+	// A fila de leilao e do banco, nao do canal: uma vez so.
 	go auctionLoop(ctx, canalHandler, log)
-	go dungeonLoop(ctx, canalHandler, log)
-	go chestLoop(ctx, canalHandler)
 
-	tarefas := 2
-	errc := make(chan error, 4)
-	for _, srv := range []*netsrv.Server{loginSrv, channelSrv} {
+	tarefas := 1 + len(canalSrvs)
+	errc := make(chan error, 3+len(canalSrvs))
+	for _, srv := range append([]*netsrv.Server{loginSrv}, canalSrvs...) {
 		go func(s *netsrv.Server) { errc <- s.Serve(ctx) }(srv)
 	}
 	if tokenSrv != nil {
@@ -508,19 +679,27 @@ func auctionLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
 // onlineCounter informa quantos jogadores estao conectados, somando as duas
 // portas, para a rota de lista de servidores do token.
 type onlineCounter struct {
-	loginSrv   *netsrv.Server
-	channelSrv *netsrv.Server
-	canal      *game.Channel
+	loginSrv    *netsrv.Server
+	channelSrvs []*netsrv.Server
+	canais      []*game.Channel
 }
 
 func (o onlineCounter) OnlinePlayers() int {
-	if o.canal != nil {
+	if len(o.canais) > 0 {
 		// Conta quem esta em jogo, nao socket aberto: o original somava
 		// conexoes e a lista de servidores mostrava gente que ainda estava
 		// na tela de login.
-		return o.canal.Count()
+		n := 0
+		for _, c := range o.canais {
+			n += int(c.Count())
+		}
+		return n
 	}
-	return int(o.channelSrv.Conns())
+	n := 0
+	for _, s := range o.channelSrvs {
+		n += int(s.Conns())
+	}
+	return n
 }
 
 // noChars devolve lista vazia. Usado com -no-db.
@@ -633,4 +812,43 @@ func dataDirDefault() string {
 		}
 	}
 	return "Data"
+}
+
+// saveInterval e o passo da gravacao periodica de quem esta em jogo. A origem
+// so gravava em eventos soltos e na saida; uma queda perdia a sessao inteira.
+const saveInterval = 2 * time.Minute
+
+// saveLoop grava periodicamente todos os jogadores em jogo.
+func saveLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
+	t := time.NewTicker(saveInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if n := h.SaveAllTick(); n > 0 {
+				log.Debug("gravacao periodica", "jogadores", n)
+			}
+		}
+	}
+}
+
+// buffInterval e o passo com que os buffs vencidos saem. A origem os
+// conferia numa thread (TBaseMob.RefreshBuffs); sem este laco o Go nunca os
+// removia.
+const buffInterval = time.Second
+
+// buffLoop tira os buffs vencidos.
+func buffLoop(ctx context.Context, h *game.Handler) {
+	t := time.NewTicker(buffInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			h.BuffTick()
+		}
+	}
 }

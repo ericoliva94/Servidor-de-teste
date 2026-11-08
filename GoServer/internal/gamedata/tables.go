@@ -16,14 +16,19 @@ const (
 // Tables reune as tabelas estaticas que o servidor carrega no inicio.
 // Equivale as variaveis globais do bloco "Files defs" de GlobalDefs.pas.
 type Tables struct {
-	Items        []ItemFromList // ItemList
-	Skills       []T_SkillData  // SkillData
-	SetItems     []T_SetItem    // SetItem
-	Conjuntos    []uint16       // Conjuntos
-	Exp          []uint64       // ExpList
-	PranExp      []uint32       // PranExpList
-	Quests       []QuestFromList
-	Recipes      []RecipeData
+	Items     []ItemFromList // ItemList
+	Skills    []T_SkillData  // SkillData
+	SetItems  []T_SetItem    // SetItem
+	Conjuntos []uint16       // Conjuntos
+	Exp       []uint64       // ExpList
+	PranExp   []uint32       // PranExpList
+	Quests    []QuestFromList
+	Recipes   []RecipeData
+	// MakeItems e MakeIngredients vem de MakeItems*.csv (fabricacao).
+	MakeItems       []MakeItemsData
+	MakeIngredients []MakeItemsIngredientsData
+	// MakeWarnings lista as linhas ruins desses CSV.
+	MakeWarnings []string
 	Premium      []PremiumItem
 	MobPos       []MobPos
 	ScrollPos    []ScrollTeleportPos
@@ -94,6 +99,9 @@ func Load(dir string) (*Tables, error) {
 	loadSlice(p("PranExpList.bin"), &t.PranExp, note)
 	loadSlice(p("Quest.bin"), &t.Quests, note)
 	loadSlice(p("Recipes.bin"), &t.Recipes, note)
+	var miss []string
+	t.MakeItems, t.MakeIngredients, miss, t.MakeWarnings = LoadMakeItems(dir)
+	t.Missing = append(t.Missing, miss...)
 	loadSlice(p("PI.bin"), &t.Premium, note)
 	loadSlice(p("MobPos.bin"), &t.MobPos, note)
 	loadSlice(p("ScrollPos.bin"), &t.ScrollPos, note)
@@ -132,6 +140,22 @@ func (t *Tables) Item(i int) *ItemFromList {
 		return nil
 	}
 	return &t.Items[i]
+}
+
+// ConjuntoDe devolve o conjunto (Conjuntos[item]) a que o item pertence, ou 0.
+func (t *Tables) ConjuntoDe(item int) uint16 {
+	if t == nil || item < 0 || item >= len(t.Conjuntos) {
+		return 0
+	}
+	return t.Conjuntos[item]
+}
+
+// SetItemAt devolve a linha i de SetItem, ou nil fora da faixa.
+func (t *Tables) SetItemAt(i int) *T_SetItem {
+	if t == nil || i < 0 || i >= len(t.SetItems) {
+		return nil
+	}
+	return &t.SetItems[i]
 }
 
 // Skill devolve a skill de indice i, ou nil fora da faixa.
@@ -224,4 +248,21 @@ func (t *Tables) ExpForLevel(level uint16) (uint64, bool) {
 		return 0, false
 	}
 	return t.Exp[level], true
+}
+
+// ReinforceCost devolve o custo em ouro de refinar o item de UseEffect dado.
+// weapon escolhe ReinforceW01 (armas) ou ReinforceA01 (armaduras). O indice
+// da linha e UseEffect-1, como em TItemFunctions.GetReinforceCust.
+func (t *Tables) ReinforceCost(weapon bool, useEffect int) (uint32, bool) {
+	if t == nil || useEffect <= 0 {
+		return 0, false
+	}
+	rows := t.ReinforceA01
+	if weapon {
+		rows = t.ReinforceW01
+	}
+	if useEffect-1 >= len(rows) {
+		return 0, false
+	}
+	return rows[useEffect-1].ReinforceCust, true
 }

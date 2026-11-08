@@ -145,6 +145,8 @@ func (h *Handler) spawnPair(a, b *Session) {
 	b.Base.VisiblePlayers.Add(a.ClientID)
 	h.sendSpawn(b, a.ClientID) // b aparece para a
 	h.sendSpawn(a, b.ClientID) // a aparece para b
+	h.showPranTo(b, a.ClientID)
+	h.showPranTo(a, b.ClientID)
 }
 
 // despawnPair desfaz o par. Porte de TBaseMob.RemoveFromVisible.
@@ -160,6 +162,8 @@ func (h *Handler) despawnPair(a, b *Session) {
 	if b.Base.Targets != nil {
 		b.Base.Targets.Remove(a.ClientID)
 	}
+	h.hidePranFrom(b, a.ClientID)
+	h.hidePranFrom(a, b.ClientID)
 	h.sendRemove(b.ClientID, a.ClientID)
 	h.sendRemove(a.ClientID, b.ClientID)
 }
@@ -207,6 +211,7 @@ func (h *Handler) removeFromEveryone(s *Session) {
 		h.log().Error("montar remocao", "cliente", s.ClientID, "erro", err)
 		return
 	}
+	pranRaw := h.pranRemoveRaw(s)
 	for _, id := range ids {
 		outro, _, ok := h.Chan.Lookup(id)
 		if ok {
@@ -216,6 +221,9 @@ func (h *Handler) removeFromEveryone(s *Session) {
 			}
 		}
 		_ = h.Chan.SendTo(id, raw)
+		if pranRaw != nil {
+			_ = h.Chan.SendTo(id, pranRaw)
+		}
 	}
 	s.Base.VisiblePlayers.Clear()
 }

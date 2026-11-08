@@ -275,6 +275,7 @@ func (s *Server) drain(ctx context.Context, c *Conn) bool {
 		if s.handler == nil {
 			continue
 		}
+		traceRx(s.log, c.ip, pkt.Code, int(pkt.Size), pkt.Data)
 		if err := s.handler.HandlePacket(ctx, c, pkt); err != nil {
 			s.log.Info("conexao encerrada pelo handler", "servidor", s.cfg.Name,
 				"ip", c.ip, "codigo", fmt.Sprintf("%#x", pkt.Code), "motivo", err)

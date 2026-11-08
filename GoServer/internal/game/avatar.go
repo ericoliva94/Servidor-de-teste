@@ -90,6 +90,16 @@ type Avatar struct {
 	// do equipamento vestido, que ali era somado tanto ao HP quanto ao MP.
 	EquipHPMPBonus int
 
+	// Efeitos do conjunto vestido (SetItem). SetHP, SetMP e SetCons somam ao
+	// HP, ao MP e a constituicao; CallSkills e o EFF_5 da origem, as skills
+	// que um golpe pode disparar (EF_CALLSKILL).
+	SetHP, SetMP, SetCons int
+	// Relic sao os efeitos das reliquias do templo sobre este jogador.
+	Relic RelicEffects
+	// Ability e o acumulador de efeitos dos buffs ativos (MOB_EF).
+	Ability    Ability
+	CallSkills [itemfn.MaxCallSkills]uint16
+
 	// PlayerKill marca quem esta com o nome vermelho: a origem somava $80 ao
 	// SpawnType nesse caso.
 	PlayerKill bool
@@ -182,7 +192,15 @@ func (a *Avatar) ApplyEquipBonus(t itemfn.Tabelas, set store.ItemSet) {
 		return
 	}
 	a.EquipHPMPBonus = itemfn.EquippedHPMPInc(t, set.Slots)
-	a.Recalc(stats.Bonus{})
+	eq := itemfn.EquippedStats(t, set.Slots)
+	b := stats.Bonus{
+		AtkFis: eq.AtkFis, AtkMag: eq.AtkMag,
+		DefFis: eq.DefFis, DefMag: eq.DefMag,
+	}
+	a.applySetEffects(t, set, &b)
+	a.Relic.addTo(&b)
+	a.Ability.addTo(&b)
+	a.Recalc(b)
 	// O teto novo pode ser menor que o HP gravado: trocar de equipamento para
 	// um sem bonus reduz o maximo, e a origem deixava CurHP acima dele.
 	if a.CurHP > a.MaxHP {
@@ -190,6 +208,40 @@ func (a *Avatar) ApplyEquipBonus(t itemfn.Tabelas, set store.ItemSet) {
 	}
 	if a.CurMP > a.MaxMP {
 		a.CurMP = a.MaxMP
+	}
+}
+
+// applySetEffects soma ao bonus os efeitos do conjunto vestido e guarda as
+// skills de EF_CALLSKILL. Efeitos que o servidor ainda nao interpreta ficam de
+// fora, como todos os outros EF da tabela de set.
+func (a *Avatar) applySetEffects(t itemfn.Tabelas, set store.ItemSet, b *stats.Bonus) {
+	a.SetHP, a.SetMP, a.SetCons = 0, 0, 0
+	a.CallSkills = [itemfn.MaxCallSkills]uint16{}
+	st, ok := t.(itemfn.SetTables)
+	if !ok {
+		return
+	}
+	nCall := 0
+	for _, e := range itemfn.SetEffects(st, set.Slots) {
+		v := int(e.EFV)
+		switch e.EF {
+		case itemfn.EFHP:
+			a.SetHP += v
+		case itemfn.EFMP:
+			a.SetMP += v
+		case itemfn.EFCon:
+			a.SetCons += v
+			b.Cons += v
+		case itemfn.EFCritical:
+			b.Critical += v
+		case itemfn.EFDamage1:
+			b.AtkFis += v
+		case itemfn.EFCallSkill:
+			if nCall < len(a.CallSkills) {
+				a.CallSkills[nCall] = e.EFV
+				nCall++
+			}
+		}
 	}
 }
 
@@ -237,10 +289,12 @@ func (a *Avatar) RecalcMax() {
 	in := stats.Input{
 		ClassInfo: a.ClassInfo,
 		Level:     a.Level,
-		Cons:      a.Cons,
-		Luck:      a.Luck,
-		FlatHP:    a.EquipHPMPBonus,
-		FlatMP:    a.EquipHPMPBonus,
+		Cons:      a.Cons + uint16(min(max(a.SetCons+a.Ability.get(efCon), 0), 65535-int(a.Cons))),
+		Luck:      a.Luck + uint16(min(max(a.Ability.get(efSpi), 0), 65535-int(a.Luck))),
+		FlatHP:    a.EquipHPMPBonus + a.SetHP + a.Ability.get(efHP),
+		FlatMP:    a.EquipHPMPBonus + a.SetMP + a.Ability.get(efMP),
+		PercentHP: a.Relic.PerHP + a.Ability.percentHP(),
+		PercentMP: a.Relic.PerMP + a.Ability.percentMP(),
 	}
 	a.MaxHP = stats.MaxHP(in)
 	a.MaxMP = stats.MaxMP(in)

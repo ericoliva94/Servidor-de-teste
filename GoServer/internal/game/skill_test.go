@@ -405,19 +405,17 @@ func TestSkillRespeitaARecarga(t *testing.T) {
 	}
 }
 
-// Skill de area e de pran avisam em vez de sair.
-func TestSkillDeAreaEDePranAvisam(t *testing.T) {
+// Skill de pran ainda avisa em vez de sair (a de area foi portada: ver skillarea_test.go).
+func TestSkillDePranAvisa(t *testing.T) {
 	h, tab, _ := handlerComSkills(t)
-	tab.poe(300, gamedata.T_SkillData{SuccessRate: 1, Range: 5, Classe: 1})
 	tab.poe(400, gamedata.T_SkillData{SuccessRate: 1, Classe: 61})
 	e := novoEspiao(t)
 	s := lutador("Alfa", 1000, 1000)
 	s.Avatar.ClassInfo = 1
-	s.Skills.Others[0] = model.SkillFromList{Index: 300, Level: 5}
 	s.Skills.Others[1] = model.SkillFromList{Index: 400, Level: 5}
 	h.Chan.Join(e.conn, s)
 
-	for _, sk := range []uint32{300, 400} {
+	for _, sk := range []uint32{400} {
 		if err := h.useSkill(context.Background(), e.conn, s,
 			asPacket(t, useSkillPacket(sk, 0))); err != nil {
 			t.Fatalf("skill %d: %v", sk, err)

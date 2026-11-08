@@ -432,3 +432,28 @@ func (h *Handler) broadcastMobSpawn(m *Mob) {
 
 // IsMobTarget diz se o id vindo do cliente e de mob.
 func IsMobTarget(id uint16) bool { return entity.IsMobID(id) }
+
+// HitKeepOne desconta vida de um mob sem matá-lo (RemoveHP com StayOneHP): o
+// dano contínuo deixa o mob com 1 de vida no mínimo. Devolve false se o mob já
+// estava morto.
+func (w *MobWorld) HitKeepOne(m *Mob, dano int, atacante uint16, agora time.Time) bool {
+	if w == nil || m == nil || dano <= 0 {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if m.Dead {
+		return false
+	}
+	if !m.Attacked {
+		m.Attacked = true
+		m.FirstAttackerID = atacante
+	}
+	m.AttackerID = atacante
+	if uint32(dano) >= m.CurHP {
+		m.CurHP = 1
+	} else {
+		m.CurHP -= uint32(dano)
+	}
+	return true
+}

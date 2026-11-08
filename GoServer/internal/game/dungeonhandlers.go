@@ -607,10 +607,10 @@ func (h *Handler) dungeonMobAttack(ctx context.Context, in *dungeon.Instance,
 	// antes da conta e saiam com Exit, mas so quando o jogador os tinha.
 	if dano > 0 {
 		if alvo.Base.Buffs.Has(combat.BuffBlock19) {
-			alvo.Base.Buffs.Remove(combat.BuffBlock19)
+			h.removeBuffAndNotify(alvo, combat.BuffBlock19)
 			dano, tipo = 0, combat.Block
 		} else if alvo.Base.Buffs.Has(combat.BuffBlock91) {
-			alvo.Base.Buffs.Remove(combat.BuffBlock91)
+			h.removeBuffAndNotify(alvo, combat.BuffBlock91)
 			dano, tipo = 0, combat.Miss2
 		}
 	}
@@ -651,9 +651,10 @@ func (h *Handler) broadcastDungeonAttack(in *dungeon.Instance, m *dungeon.Mob,
 	pkt.DNType = uint8(tipo)
 	pkt.DANO = uint64(max(dano, 0))
 	pkt.MobCurrHP = alvo.Avatar.CurHP
-	pkt.MobAnimation = 26
+	pkt.Animation = MobAttackAnimation
+	pkt.MobAnimation = MobHitReaction
 	if alvo.Dead {
-		pkt.MobAnimation = 30
+		pkt.MobAnimation = MobDeathReaction
 		pkt.DeathPos.X = alvo.Position.X
 		pkt.DeathPos.Y = alvo.Position.Y
 	}

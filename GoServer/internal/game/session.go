@@ -11,6 +11,7 @@ import (
 	"aika/internal/combat"
 	"aika/internal/entity"
 	"aika/internal/model"
+	"aika/internal/pran"
 	"aika/internal/store"
 )
 
@@ -74,6 +75,11 @@ type Session struct {
 	LastPing time.Time
 	// LastAttack e o instante do ultimo golpe aceito (LastBasicAttack).
 	LastAttack time.Time
+	// AtkAnim e AtkSkill sao a animacao e a skill do golpe em curso, que vao
+	// no $102 (Animation e SkillID). Sem a animacao o cliente nao toca o
+	// golpe: no Delphi ela vinha de Packet.Anim, copiada pelo SendDamage.
+	AtkAnim  uint8
+	AtkSkill uint32
 	// AttacksAccumulated conta os golpes para o desgaste da arma.
 	AttacksAccumulated int
 
@@ -90,10 +96,53 @@ type Session struct {
 	// PartyRequester e quem convidou este jogador para um grupo, zero quando
 	// nao ha convite pendente.
 	PartyRequester uint16
+	// RaidRequester e quem convidou o grupo deste jogador para uma legiao.
+	RaidRequester uint16
+	// AllyByLegion marca que o proximo $343 responde a um convite de aliança de
+	// guildas e AllyRequester e o lider da aliança que chamou.
+	AllyByLegion  bool
+	AllyRequester uint16
+	// Duel e o duelo do jogador (desafio pendente e duelo em curso).
+	Duel duelState
+	// couponFails e couponLast limitam as tentativas de cupom.
+	couponFails int
+	couponLast  time.Time
 	// GuildRequester e quem convidou este jogador para uma guilda.
 	GuildRequester uint16
 	// CanSendMailTo e o destinatario que passou pela conferencia do $3F16.
 	CanSendMailTo string
+	// ItemBar e a barra de atalhos (24 posicoes) e Teleports a lista de posicoes
+	// de teleporte do mago.
+	ItemBar   [store.ItemBarSlots]uint32
+	Teleports [MaxTeleportSlots]model.Position
+	// Action e a ultima animacao de acao (sentar, etc.) que o cliente mandou.
+	Action uint32
+	// OpenedDevir e OpenedTemple sao o templo (devir) e a vaga que o jogador
+	// abriu, NoDevir quando nenhum.
+	OpenedDevir  uint8
+	OpenedTemple uint8
+	// Trade e a negociacao em curso (comercio entre jogadores).
+	Trade tradeState
+	// Shop e a loja pessoal que o jogador mantem aberta e a que esta olhando.
+	Shop shopState
+	// NegarCura conta as curas trocadas por dano (EF_ANTICURE); regen guarda a
+	// regeneracao de HP e MP que cada buff ativo mantem.
+	NegarCura int
+	// DefesaPoints (buff 32), BolhaPoints (buff 36) e UniaoDivina (buff 35) sao os
+	// contadores que a origem guardava no TBaseMob.
+	DefesaPoints uint8
+	BolhaPoints  uint8
+	UniaoDivina  string
+	// ResolutoPoints/ResolutoTime marcam o alvo do Resoluto; LongSkillPos e a posicao
+	// do ultimo lancamento (LastPositionLongSkill).
+	ResolutoPoints uint8
+	ResolutoTime   time.Time
+	LongSkillPos   model.Position
+	regen          map[uint16]regenState
+	dots           map[uint16]dotState
+	// Friends e a lista de amigos, as janelas de conversa abertas e os
+	// pedidos de amizade pendentes.
+	Friends friendState
 
 	// DungeonInstance e a instancia em que o jogador esta, zero fora de
 	// dungeon. A origem tinha cinco campos para isso (DungeonLobbyIndex,
@@ -112,6 +161,24 @@ type Session struct {
 	// veem. So tem conteudo a partir do Playing.
 	Avatar Avatar
 
+	// Prans sao as duas prans da conta (nil ate o login carregar) e PranClientID
+	// o id da que esta no mundo; SpawnedPran e o indice dela, -1 se nenhuma.
+	Prans        [2]*pran.Pran
+	PranClientID uint16
+	SpawnedPran  int
+	// pranApplied guarda os efeitos da pran somados ao Ability do dono.
+	pranApplied []efv
+	// Titles e a lista de titulos do personagem (TTitleList, 96); ActiveTitle e
+	// o titulo ativo, com o nivel que a lista tem dele; titleApplied guarda os
+	// efeitos do titulo ativo somados ao Ability.
+	Titles       [store.MaxTitles]model.TitleData
+	ActiveTitle  model.TitleData
+	titleApplied []efv
+	// handoffAccount e a conta cuja troca de canal esta em andamento; zero se
+	// nenhuma.
+	handoffAccount uint32
+	// gm e o estado de painel da conexao (login em $3202).
+	gm gmSession
 	// Equip e Inventory sao os itens do personagem em jogo.
 	Equip     store.ItemSet
 	Inventory store.ItemSet
@@ -154,6 +221,8 @@ func NewSession(channel uint8) *Session {
 		Channel:      channel,
 		Status:       WaitingLogin,
 		SelectedSlot: -1,
+		OpenedDevir:  NoDevir,
+		OpenedTemple: NoDevir,
 		Base: EntityState{
 			Buffs:     entity.NewBuffs(),
 			Cooldowns: entity.NewCooldowns(),

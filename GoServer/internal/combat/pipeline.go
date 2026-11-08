@@ -118,6 +118,9 @@ func PointDefence(dano int, t Target, defesaPoints *uint8) int {
 	dano = int(num.DecInt(int32(dano), int32((dano/100)*t.Ability(EFPointDefence))))
 	if defesaPoints != nil {
 		*defesaPoints = num.DecByte(*defesaPoints, 1)
+		if *defesaPoints == 0 {
+			t.RemoveBuff(BuffPointDefence)
+		}
 	}
 	return dano
 }

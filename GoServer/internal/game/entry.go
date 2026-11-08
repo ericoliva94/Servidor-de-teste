@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"aika/internal/entity"
 	"aika/internal/model"
 	"aika/internal/netsrv"
 	"aika/internal/packets"
@@ -238,6 +239,10 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	for i := range ch.Inventory {
 		ch.Inventory[i] = inventario.Get(i)
 	}
+	s.ItemBar = h.loadItemBar(ctx, src.ID)
+	for i := range ch.ItemBar {
+		ch.ItemBar[i] = s.ItemBar[i]
+	}
 
 	s.SelectedSlot = slot
 	s.Equip = equip
@@ -250,8 +255,14 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	s.CashBalance = s.Account.Cash
 	s.Skills = skills
 	s.Avatar = AvatarFromCharacter(src, uint16(s.Account.Nation))
+	h.loadTitles(ctx, s, src.ID, src.ActiveTitle)
+	// Buffs e efeitos sao do personagem: trocar de personagem na mesma conexao
+	// nao pode carregar os do anterior.
+	s.Base.Buffs = entity.NewBuffs()
 	s.Avatar.SetEquip(equip)
+	s.Avatar.Relic = relicEffectsFor(h.Devir, s.Avatar.Nation)
 	s.Avatar.ApplyEquipBonus(h.Data, equip)
+	h.loadTeleports(ctx, s, src.ID)
 	s.SpeedMove = s.Avatar.SpeedMove
 	s.Position = entryPosition(src)
 	s.AnchorPosition = s.Position
@@ -274,6 +285,7 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	ch.CurrentScore.Infamia = src.Infamia
 	ch.CurrentScore.SkillPoint = src.SkillPoint
 	ch.ActiveTitle = src.ActiveTitle
+	h.fillTitleProgress(s, ch)
 	// O $925 leva a mascara de niveis em SkillList; a arvore em si fica na
 	// sessao e vai pelos pacotes $106 e $107.
 	h.fillSkillMask(s, ch.SkillList[:])
@@ -300,6 +312,17 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	h.sendSkillList(c, s)
 	h.enterGuild(c, s)
 	h.enterMail(ctx, c, s)
+	h.loadFriends(ctx, c, s)
+	h.enterTitle(c, s)
+	h.loadPrans(ctx, s)
+	h.sendNationInformation(c, s)
+	h.sendReliques(c, s)
+	h.enterPran(c, s)
+	// O $925 nao leva posicao: e o pacote de criacao do proprio jogador que
+	// diz ao cliente onde ele esta (SendToWorldSends, Player.pas:
+	// "Base.SendCreateMob(SPAWN_NORMAL, Self.Base.clientId)"). Sem ele o
+	// cliente ignorava posx/posy do banco e nao ia para onde foi gravado.
+	h.sendSpawn(s, s.ClientID)
 	h.refreshVisible(s)
 	h.refreshVisibleMobs(s)
 	h.sendMapObjectsNear(s)
@@ -362,7 +385,38 @@ func (h *Handler) loadItems(ctx context.Context, s *Session, charID uint32) (equ
 	for _, a := range append(equip.Avisos, inv.Avisos...) {
 		h.log().Warn("itens", "personagem", charID, "aviso", a)
 	}
+	garantirBolsaInicial(&inv)
 	return equip, inv
+}
+
+// BolsaInicial e o item "Bag" que fica no slot 60 do inventario.
+const (
+	BolsaInicial     = 5300
+	slotBolsaInicial = 60
+)
+
+// garantirBolsaInicial porta o final de LoadCharacters (Player.pas:1253): sem
+// nada no slot 60 o Delphi grava a Bag 5300 ali. Sem ela os 15 primeiros
+// slots ficam sem bolsa e o moveItem recusa qualquer movimento (ErrBolsaAusente).
+func garantirBolsaInicial(inv *store.ItemSet) {
+	if len(inv.Slots) <= slotBolsaInicial {
+		return
+	}
+	// Personagens criados antes da correcao tem a bolsa so com o Index (invisivel
+	// no cliente): completa APP e quantidade.
+	if b := &inv.Slots[slotBolsaInicial]; b.Index == BolsaInicial {
+		if b.APP == 0 {
+			b.APP = BolsaInicial
+		}
+		if b.Refi == 0 {
+			b.Refi = 1
+		}
+		return
+	}
+	if !inv.Slots[slotBolsaInicial].IsEmpty() {
+		return
+	}
+	inv.Slots[slotBolsaInicial] = model.Item{Index: BolsaInicial, APP: BolsaInicial, Refi: 1}
 }
 
 // loadStorage le o armazem da conta.

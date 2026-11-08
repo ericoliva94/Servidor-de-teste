@@ -3,7 +3,6 @@ package game
 import (
 	"aika/internal/netsrv"
 	"aika/internal/packets"
-	"aika/internal/stats"
 )
 
 // CodeCurrentLevel e o $108: nivel e experiencia do jogador.
@@ -34,6 +33,9 @@ type ExpTable interface {
 	// faixa da tabela.
 	ExpForLevel(level uint16) (uint64, bool)
 }
+
+// levelUpEffect e o efeito visual de subir de nivel (SendEffect(1)).
+const levelUpEffect = 1
 
 // addExp soma experiencia e sobe de nivel enquanto der. Porte de
 // TPlayer.AddExp com TPlayer.AddLevel.
@@ -68,10 +70,23 @@ func (h *Handler) addExp(c *netsrv.Conn, s *Session, valor int64, tipo int) int6
 			"usuario", s.Username, "personagem", s.Avatar.Name,
 			"de", antes, "para", s.Avatar.Level)
 		// Subir de nivel muda os maximos e os atributos derivados.
-		s.Avatar.Recalc(stats.Bonus{})
+		// Com o bonus do equipamento e das reliquias: Recalc(Bonus{}) os zerava.
+		s.Avatar.ApplyEquipBonus(h.data(), s.Equip)
 		s.Avatar.CurHP = s.Avatar.MaxHP
 		s.Avatar.CurMP = s.Avatar.MaxMP
-		h.sendStatus(c, s)
+		// A origem (TPlayer.AddLevel) manda, nesta ordem: HP/MP, nivel e pontos,
+		// atualiza o grupo, solta o efeito de nivel e avisa os amigos. Nao manda
+		// o $10A: o cliente refaz o painel sozinho. O Go mandava o $10A antes do
+		// nivel, e o cliente travava ao subir de nivel.
+		h.sendCurrentHPMP(c, s)
+		h.sendRefreshLevel(c, s)
+		h.sendRefreshPoint(c, s)
+		if g := h.Parties.Of(s.ClientID); g != nil {
+			h.refreshParty(g)
+		}
+		h.sendEffect(s, levelUpEffect)
+		h.broadcastFriendUpdate(s)
+		return ganho
 	}
 	h.sendRefreshLevel(c, s)
 	return ganho

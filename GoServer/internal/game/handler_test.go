@@ -350,7 +350,10 @@ func TestStatusString(t *testing.T) {
 func asPacket(t *testing.T, raw []byte) protocol.Packet {
 	t.Helper()
 	f := protocol.NewFramer()
-	if err := f.Feed(raw); err != nil {
+	// O Framer toma por "hello" um primeiro pacote cujos bytes 2 e 3 sejam 11 1F
+	// (1 em 65536 no mundo real, mas ~1 em 270 nos pacotes pequenos de teste, de
+	// checksum fixo). Um hello verdadeiro na frente tira essa colisao do teste.
+	if err := f.Feed(append([]byte{0x11, 0xF3, 0, 0}, raw...)); err != nil {
 		t.Fatal(err)
 	}
 	pkt, ok, err := f.Next()

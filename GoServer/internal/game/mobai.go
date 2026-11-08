@@ -199,11 +199,11 @@ func (h *Handler) mobHitsPlayer(m *Mob, sp *mobdata.Species, alvo *Session) {
 	} else {
 		// Os buffs de bloqueio zeram o golpe e sao consumidos.
 		if alvo.Base.Buffs.Has(combat.BuffBlock19) {
-			alvo.Base.Buffs.Remove(combat.BuffBlock19)
+			h.removeBuffAndNotify(alvo, combat.BuffBlock19)
 			dano = 0
 			tipo = combat.Block
 		} else if alvo.Base.Buffs.Has(combat.BuffBlock91) {
-			alvo.Base.Buffs.Remove(combat.BuffBlock91)
+			h.removeBuffAndNotify(alvo, combat.BuffBlock91)
 			dano = 0
 			tipo = combat.Miss2
 		}
@@ -219,11 +219,13 @@ func (h *Handler) mobHitsPlayer(m *Mob, sp *mobdata.Species, alvo *Session) {
 	if dano > 0 {
 		alvoT := &sessionTarget{s: alvo, h: h}
 		mobT := &mobTarget{m: m, w: h.Mobs}
-		res := combat.ApplyToTarget(dano, tipo, alvoT, mobT, nil)
+		res := combat.ApplyToTarget(dano, tipo, alvoT, mobT, &alvo.DefesaPoints)
 		dano, tipo = res.Damage, res.Type
 		if res.Reflected > 0 {
 			h.Mobs.Hit(m, res.Reflected, alvo.ClientID, h.now())
 		}
+		dano = h.divineUnion(alvo, dano)
+		dano = h.reactiveHit(nil, alvo, dano, tipo, tipo != combat.Miss)
 	}
 
 	h.applyDamage(alvo, dano)
@@ -235,6 +237,13 @@ func (h *Handler) mobHitsPlayer(m *Mob, sp *mobdata.Species, alvo *Session) {
 		h.mobForget(m)
 	}
 }
+
+// Animacoes fixas do golpe de mob, de TMobSPosition.AttackPlayer (MOB.pas).
+const (
+	MobAttackAnimation = 6
+	MobHitReaction     = 26
+	MobDeathReaction   = 30
+)
 
 // broadcastMobAttack manda o $102 do golpe do mob.
 func (h *Handler) broadcastMobAttack(m *Mob, alvo *Session, tipo combat.DamageType, dano int) {
@@ -248,7 +257,12 @@ func (h *Handler) broadcastMobAttack(m *Mob, alvo *Session, tipo combat.DamageTy
 	pkt.DNType = uint8(tipo)
 	pkt.DANO = uint64(max(dano, 0))
 	pkt.MobCurrHP = alvo.Avatar.CurHP
+	// Animacao do golpe (6) e reacao do alvo (26, ou 30 na morte): os valores
+	// fixos de TMobSPosition.AttackPlayer. Sem eles o mob bate sem animar.
+	pkt.Animation = MobAttackAnimation
+	pkt.MobAnimation = MobHitReaction
 	if alvo.Dead {
+		pkt.MobAnimation = MobDeathReaction
 		pkt.DeathPos.X = alvo.Position.X
 		pkt.DeathPos.Y = alvo.Position.Y
 	}
