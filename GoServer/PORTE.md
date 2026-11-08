@@ -106,7 +106,8 @@ de evidências.
 | 10t | Armazém e baú de guilda: opção de NPC (`$30F`/`$348`), armazém (`$137`/`$310`), baú (`$D58`/`$F10`/`$D18`/`$F2F`), ouro (`$F59`) e arrasto de item nos dois | `PacketHandlers.pas` (`OpenNPC`, `ChangeGold`, `MoveItem`), `GuildData.pas` (`OpenChest`), `Player.pas` (`SendStorage`) | **pronto** (ver abaixo) |
 | 10u | Usar item: `$31D` (poções, moedas, experiência, buffs, bolsas, pedra de reparo, Símbolo da Confiança) e `$21B` (itens de buff) | `PacketHandlers.pas` (`UseItem`, `UseBuffItem`), `ItemFunctions.pas` (`TItemFunctions.UseItem`) | **pronto** (ver abaixo; baús com conteúdo chumbado, receita, portal, pran e premium a fazer) |
 | 10v | Inventário premium: comprar (`$209`), usar (`$31D` com `CASH_TYPE`), presentear (`$356`), saldo (`$139`), slots (`$138`) e selo de item (`$224`) | `PacketHandlers.pas` (`BuyItemCash`, `SendGift`, `UnsealItem`), `ItemFunctions.pas` (`UsePremiumItem`), `MiscData.pas` (`TItem.SetIsSealed`) | **pronto** (ver abaixo; cupom a fazer) |
-| 10w | Nação, eventos, ranked, pet, pran, cerco, NPC/loja, central de pran, baús de presente, receitas, cupom | `Nation/`, `Events/`, `Rankeds/`, `PET.pas`, `NPC.pas` | a fazer |
+| 10w | Lista de amigos: pedir (`$372`), responder (`$673`), remover (`$F74`), janela e conversa (`$F27`/`$F26`/`$F30`), lista (`$870`), entrada/saída/atualização (`$96F`/`$971`/`$975`) | `EntityFriend.pas`, `PacketHandlers.pas`, `Player.pas` | **pronto** (ver abaixo; cidade zerada, um canal só) |
+| 10x | Nação, eventos, ranked, pet, pran, cerco, NPC/loja, central de pran, baús de presente, receitas, cupom | `Nation/`, `Events/`, `Rankeds/`, `PET.pas`, `NPC.pas` | a fazer |
 
 As fases 1 e 2 vêm primeiro porque são o piso: sem enquadramento e cifra
 corretos, nada mais pode ser testado contra o cliente real.
@@ -1821,3 +1822,181 @@ jogador.
   permite, mas dois canais permitiriam) divergiriam, e a última gravação
   venceria. É o mesmo comportamento da origem; a correção pertence à fase que
   unificar o estado de conta entre canais.
+
+### Lista de amigos (`$372`, `$673`, `$F74`, `$F26`, `$F27`, `$F30`)
+
+Estado da conta-personagem: até 50 amigos (`friend_list`, duas linhas por
+amizade, uma para cada dono) e até 6 janelas de conversa abertas. Porte de
+`EntityFriend.pas`, dos handlers em `PacketHandlers.pas:6119-6305` e dos
+métodos `TPlayer.*Friend*` em `Player.pas:9845-10050`.
+
+#### `$673` aceitava amizade que ninguém pediu
+
+```pascal
+OtherPlayer := @Servers[Player.ChannelIndex].Players[Packet.Id];
+...
+case Player.AddFriend(Packet.Id) of
+```
+
+`AddFriendResponse` não conferia se `Packet.Id` tinha mandado um pedido. Bastava
+um cliente enviar o `$673` com `Response = 1` e o id de qualquer jogador em
+jogo: os dois viravam amigos, com gravação no banco dos dois lados e a
+mensagem "aceitou seu pedido de amizade" na tela da vítima. No porte o pedido
+fica guardado no convidado (`friendState.pending`) e vale **uma** resposta;
+resposta sem pedido é descartada.
+
+#### Conversa com quem não é amigo
+
+`OpenFriendWindow` só chamava `getFriend(CharIndex)`, que apenas procura o
+personagem **online** em qualquer canal — não confere a lista de amigos. Com a
+janela aberta, `SendFriendSay` entregava a fala ao alvo (inclusive abrindo a
+janela dele). Era um sussurro sem nenhuma das restrições do sussurro. No porte
+a janela só abre para quem está na lista de amigos.
+
+Também: `FriendOpenWindowns.Add` com índice repetido levantava exceção
+(`EListError`); agora é recusado. O apelido que o destinatário vê é o do autor,
+e o texto da fala (128 bytes, o cliente pode mandar sem terminador) é relido
+com limite e regravado com terminador.
+
+#### Remover sem conferir amizade
+
+`removeFriend` desativava as duas linhas e mandava o `$F74` para o cliente
+mesmo quando o `CharIndex` não estava na lista. No porte exige que esteja.
+Os dois `UPDATE` (um por sentido) viram uma transação; a origem saía no
+primeiro que falhasse e deixava a amizade pela metade. O mesmo vale para o
+`INSERT` duplo de `addFriend`.
+
+#### Valores de cabeçalho e nível
+
+* `Header.Index` do `$870`, `$F74`, `$F27`, `$F30` é o ClientID do destinatário;
+  do `$96F`, `$975` e `$971` é zero (na origem os dois primeiros eram zerados
+  por `ZeroMemory`; o `$971` tinha lixo de pilha, o record não era zerado).
+* `Level - 1` num `BYTE`: nível 0 virava 255. Piso em zero, teto 255.
+* Pedido a si mesmo é recusado já no `$372` (a origem só checava no aceite, e
+  respondia sucesso mesmo assim).
+* `RefreshMeToFriends` no `Teleport` e a cidade (`City`) dependem de
+  `GetCurrentCityID`, ainda não portado: ver `KNOWN_ISSUES.md`.
+
+### Pilhas de itens (`$332`, `$333`)
+
+`AgroupItem` juntava dois slots do inventário só por terem o mesmo `Index`, sem
+conferir `CanAgroup`: dois equipamentos iguais "juntavam" somando o `Refi`
+(refino) de um ao do outro e apagando o segundo. Com `srcSlot = destSlot` a
+quantidade dobrava e o `ZeroMemory` seguinte apagava o item inteiro. Nenhum
+dos slots tinha a bolsa conferida, e a soma não tinha teto.
+
+`UngroupItem` só recusava pelo campo `Expires`. Um equipamento com `Refi` 48
+separado em 16 gerava, por `Move` do registro inteiro, **uma cópia** do
+equipamento (mesmo `Identific`) com refino 16, e o original ficava com 32:
+duplicação. `Quantidade = 0` criava um slot com item de quantidade zero.
+
+No porte: o item precisa empilhar (`CanAgroup`), não expirar, a quantidade fica
+entre 1 e `Refi - 1`, os dois slots precisam ter a bolsa, e `GetEmptySlot` só
+considera slots cuja bolsa está no inventário. Acima do teto (1000) o destino
+enche e o resto fica na origem. Pran e os tipos de slot que a origem tratava
+como "não fazer nada" (equipamento, armazém) seguem sem efeito.
+
+### Refino e troca de aparência (`$32D`, tipos 0 e 2)
+
+`ReinforceItem` recebia os três slots (`item`, `Item2`, `Item3`) como `DWORD` do
+cliente e indexava `Inventory[...]` sem faixa nem bolsa: leitura e escrita
+fora do vetor. Além disso:
+
+* **Nada exigia que o alvo fosse equipamento.** Uma pilha (poção) passava, e
+  `Inc(Refi, $10)` num sucesso somava 16 unidades ao empilhável: duplicação.
+  No porte o alvo precisa ter slot de equipamento 2 a 7 e não empilhar, e o
+  material precisa empilhar.
+* **Material = próprio item** era aceito (slots repetidos).
+* `GetReinforceCust` devolvia 0 quando a linha não existia em
+  `ReinforceA01/W01`: refino de graça. Linha ausente agora recusa.
+* O tipo do material nunca é conferido na origem (só `Rank` e `Refi > 0`).
+  Mantido: não há dado no repositório que diga qual `ItemType` é o material.
+* **Mantido de propósito:** material e extrato são consumidos antes do sorteio;
+  o sorteio `RandomRange(1,101)` é multiplicado pelo `Rank` do item (quanto
+  maior o rank, menor a chance); de +0 a +3 não falha; de +4 a +6 falha perde
+  1 nível; de +7 em diante falha sem extrato **quebra** o item; extrato normal
+  (tipos 63/65) evita a quebra e enriquecido (64/66) congela o resultado
+  ("Item esta refinando!"); `Refi >= 175` bloqueia (a mensagem diz +11, o corte
+  real é +10 e meio). `Randomize` dentro da função foi removido.
+* Item `Fortification` mostrava duas mensagens (a própria e "Algo de errado");
+  agora só a própria.
+* Anúncio a todos quando o refino com sucesso chega a +9 ou mais
+  (`Round` bancário, como na origem).
+
+`ChangeApp` aplicava a aparência, zerava o item de aparência e gastava o
+Athlon **antes** de o handler conferir os 500 de ouro: sem ouro o jogador
+perdia os dois itens e ficava com a aparência assim mesmo. O ouro agora é
+conferido antes de qualquer mudança. Os slots também eram usados sem faixa e o
+mesmo slot em dois campos apagava o item. **Mantido:** a troca só exige mesma
+classe (`GetMobClass`; classe 0 vira a do jogador) e que nenhum dos dois
+empilhe — não confere se os dois itens são do mesmo tipo de equipamento
+(capacete com aparência de bota); ver `KNOWN_ISSUES.md`.
+
+### Forja (`$32B`)
+
+`MakeItem` serve a quatro operações que o cliente escolhe pelo campo `Null3`
+do pacote: desmontar (1), limpar adicionais (3 e 4), limpar aparência (6) e
+fabricar (qualquer outro valor). O campo `ItemID` é o **slot** nas três
+primeiras e o **item resultante** da receita na fabricação.
+
+#### A fabricação era inalcançável
+
+O handler abre com `if (Packet.ItemID > 63) then Exit`, valendo para todos os
+modos. Os itens resultantes de `MakeItems.csv` começam em 1000, então todo
+pedido de fabricação saía antes de chegar na receita. O porte aplica o limite
+de slot só nos modos que usam slot. É uma inferência a partir do código — não
+há como confirmar com o cliente aqui. (A pasta `_backup_original` não tem
+`PacketHandlers.pas`, então não dá para dizer se o limite foi acrescentado numa
+das correções anteriores.)
+
+#### Defeitos corrigidos na fabricação
+
+* `Amount = 0` passava na conferência de ouro (`Price * 0`) e depois cobrava
+  `Price * 1` sem conferir: ouro negativo. Quantidade 0 agora vale 1 e o
+  ouro é conferido com o valor real.
+* A quantidade de cada ingrediente era multiplicada num `WORD`
+  (`Amount * Helper1`): pedir 65535 de algo que usa 2 dava a volta e exigia
+  quase nada. Aqui a conta é em inteiro e a quantidade tem teto de 1000.
+* O saldo do ingrediente vinha de `GetItemSlotAndAmountByIndex(out Refi: BYTE)`:
+  uma pilha de 300 parecia ter 44. Aqui lê o `Refi` inteiro.
+* Duas linhas da receita com o mesmo item eram conferidas separadamente contra
+  o mesmo slot; agora o total pedido por slot é somado.
+* `PutItem` sem espaço gravava em `Inventory[255]` (`GetEmptySlot` devolve 255
+  quando não acha). `putItem` devolve falso e desfaz.
+
+#### Mantido de propósito
+
+* Cada ingrediente tem de estar inteiro no **primeiro** slot em que aparece.
+* A quantidade entregue é a pedida (equipamento sempre 1); a coluna
+  `ResultAmount` do CSV não entra na conta.
+* Falha na fabricação não cobra ouro nem consome ingrediente.
+* **O sorteio de sucesso sempre dá certo.** É `RandomRange(1, Tax div 10 + 1)
+  <= Tax div 10`: verdadeiro para qualquer `TaxSuccess >= 10`. Das 425
+  receitas, 415 têm 1000 e 10 têm 500 (provavelmente 50%): na origem todas
+  fabricam 100% das vezes. Travado por `TestFabricarSorteioDeSucessoComoAOrigem`.
+
+#### Desmontar, limpar adicionais, limpar aparência
+
+Portados como estão, com `Level_N_Destroy_Range`, quantidade 1–5 (1–7 do nível
+81 em diante) e a escolha do efeito a limpar por `Amount` (1 = primeiro
+existente, 2 = segundo, 3 = último). Corrigido: item vazio no slot consumia o
+Vaizan (o `TypeItem` do item 0 é "normal"); `Amount` acima de 3 caía na
+fabricação com o slot como id.
+
+### Loja pessoal (`$319`, `$31A`, `$31B`, `$318`) e posição de membro (`$338`)
+
+Origem: `PacketHandlers.pas` 7248–7391 e 6639; `Player.pas` `SendPersonalShop`,
+`SendPositionParty`. Código em `game/shop.go` e `game/partyhandlers.go`.
+
+* A vitrine é do servidor: o cliente diz só slot (0–59, com bolsa) e preço; o
+  item vem do inventário. A compra confere de novo que o item ainda está no
+  slot do dono, igual à fotografia, antes de mover ouro ou item.
+* Ordem da compra: validar tudo → `putItem` no comprador (que não mexe em nada
+  se não houver lugar) → só então mover ouro e esvaziar o slot do dono. A origem
+  cobrava o ouro e depois chamava `PutItem`, que podia falhar.
+* `$318`: se o jogador tem loja aberta ou visitada, o pacote é de loja (como em
+  `TradeCancel`); visitante só zera a visita (sem eco), dono recebe o eco,
+  perde o nome da loja na tela e os visitantes têm a janela fechada.
+* `$338`: o pedido devolve ao solicitante o `$11D` do **outro** membro
+  (`OtherPlayer.SendPositionParty(Player.ClientId)`), só se ambos estão no mesmo
+  grupo e em jogo.

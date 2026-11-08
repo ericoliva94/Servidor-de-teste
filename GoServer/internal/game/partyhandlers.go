@@ -20,7 +20,52 @@ const (
 	CodeGiveLeaderParty = 0x34B // cliente -> servidor: passar lideranca
 	CodeAddSelfParty    = 0x38F // cliente -> servidor: pedir para entrar
 	CodePartyCoord      = 0x11D // servidor -> cliente: posicao do membro
+
+	CodeUpdateMemberPosition = 0x338 // cliente -> servidor: pedir a posicao de um membro
 )
+
+// updateMemberPosition e o porte de TPacketHandlers.UpdateMemberPosition
+// ($338): o cliente pede onde esta um membro do grupo e recebe o $11D dele.
+//
+// A origem testava "Party.Members.Contains(PlayerIndex)" mas indexava Players
+// pelo valor do cliente sem conferir a faixa nem se o membro ainda estava em
+// jogo. Aqui o alvo precisa ser de fato membro do MEU grupo e estar em jogo.
+// Raid (grupos aliados) nao esta portada; a origem tambem a deixava anotada
+// ("ver como ficam as raids aqui").
+func (h *Handler) updateMemberPosition(ctx context.Context, c *netsrv.Conn, s *Session, p protocol.Packet) error {
+	if s.Status < Playing {
+		return ErrNotPlaying
+	}
+	var pkt packets.PartyMemberPositionPacket
+	if err := netsrv.Unmarshal(p, &pkt); err != nil {
+		return err
+	}
+	if h.Parties == nil || pkt.PlayerIndex == 0 || pkt.PlayerIndex > 0xFFFF ||
+		uint16(pkt.PlayerIndex) == s.ClientID {
+		return nil
+	}
+	grupo := h.Parties.Of(s.ClientID)
+	if grupo == nil {
+		return nil
+	}
+	alvo := uint16(pkt.PlayerIndex)
+	membro := false
+	for _, id := range h.Parties.MembersOf(grupo) {
+		if id == alvo {
+			membro = true
+			break
+		}
+	}
+	if !membro {
+		return nil
+	}
+	outro, _, ok := h.sessionOf(alvo)
+	if !ok {
+		return nil
+	}
+	h.sendPartyCoord(c, outro)
+	return nil
+}
 
 // Respostas do aceite, as constantes BOOL_* de GlobalDefs.pas.
 const (
@@ -419,10 +464,17 @@ func (h *Handler) sendPartyUpdate(c *netsrv.Conn, s *Session, grupo *Party) {
 	pkt.ExpAllocate = grupo.ExpAllocate
 	pkt.ItemAllocate = grupo.ItemAllocate
 	pkt.IsPartyLeaderOfRaid = 1
+	raid := h.Parties.RaidOf(grupo.Index)
+	if raid != nil && raid.Leader != grupo.Index {
+		pkt.IsPartyLeaderOfRaid = 0
+	}
 
 	if err := c.SendStruct(CodeUpdateParty, pkt); err != nil {
 		h.log().Debug("falha ao enviar grupo",
 			"usuario", s.Username, "erro", err)
+	}
+	if raid != nil {
+		h.sendRaidSlots(c, s, grupo, raid)
 	}
 }
 

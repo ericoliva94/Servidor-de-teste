@@ -7,6 +7,7 @@ import (
 	"aika/internal/combat"
 	"aika/internal/gamedata"
 	"aika/internal/itemfn"
+	"aika/internal/mobdata"
 	"aika/internal/netsrv"
 	"aika/internal/packets"
 	"aika/internal/protocol"
@@ -188,12 +189,10 @@ func (h *Handler) useSkill(ctx context.Context, c *netsrv.Conn, s *Session, p pr
 			"indice", pkt.Skill, "usuario", s.Username, "ip", c.IP())
 		return nil
 	}
+	s.AtkSkill = pkt.Skill
+	s.AtkAnim = 0
 	if skillfn.IsPranSkill(d.Classe) {
 		h.message(c, "Habilidades de pran ainda nao estao disponiveis.")
-		return nil
-	}
-	if skillfn.IsAreaSkill(d) {
-		h.message(c, "Habilidades de area ainda nao estao disponiveis.")
 		return nil
 	}
 	// A skill tem de estar aprendida: a origem nao conferia isso, bastava
@@ -239,13 +238,22 @@ func (h *Handler) useSkill(ctx context.Context, c *netsrv.Conn, s *Session, p pr
 
 	s.Base.Cooldowns.Use(uint16(pkt.Skill), h.now())
 	s.UsingSkill = uint16(pkt.Skill)
+	s.LongSkillPos = pkt.Pos
 
 	// Agora sim o lancamento vai para a tela de quem ve.
 	h.broadcastSkillUse(s, pkt)
 
-	if skillfn.IsSingleTargetDamage(d) {
+	// Despacho de TBaseMob.HandleSkill, pela taxa de sucesso e pelo alcance:
+	// 1/0 dano em um alvo, 1/>0 dano em area, 0/0 efeito em si ou no alvo e
+	// 0/>0 efeito em area (ou no grupo).
+	switch {
+	case skillfn.IsSingleTargetDamage(d):
 		h.skillSingleTarget(c, s, pkt, d)
-	} else if skillfn.IsBuff(d) {
+	case skillfn.IsAreaSkill(d):
+		h.skillArea(c, s, pkt, d)
+	case d.SuccessRate == 0 && d.Range > 0:
+		h.skillAreaBuff(c, s, pkt, d)
+	case d.SuccessRate == 0 && d.Range == 0, skillfn.IsBuff(d):
 		h.skillBuff(c, s, pkt, d)
 	}
 
@@ -324,7 +332,12 @@ func (h *Handler) skillSingleTarget(c *netsrv.Conn, s *Session, pkt packets.Send
 	if !s.Position.InRange(alvo.Position, h.skillRange(d)) {
 		return
 	}
+	h.skillHitPlayer(s, alvo, pkt.Skill, d)
+}
 
+// skillHitPlayer calcula e aplica o golpe de uma skill num jogador. E a parte
+// comum do alvo unico e da area.
+func (h *Handler) skillHitPlayer(s, alvo *Session, skill uint32, d *gamedata.T_SkillData) {
 	rnd := h.rand()
 	tipo := s.Roller.Roll(
 		combat.Attacker{
@@ -337,20 +350,41 @@ func (h *Handler) skillSingleTarget(c *netsrv.Conn, s *Session, pkt packets.Send
 			DuploRes: alvo.Avatar.DuploRes,
 			Esquiva:  uint16(alvo.Avatar.Esquiva),
 		},
-		true, pkt.Skill, rnd)
+		true, skill, rnd)
 
 	dano := 0
 	if tipo != combat.Miss {
-		dano = h.baseDamage(s, alvo)
+		dano = h.skillBaseDamage(s, alvo)
 		dano += skillfn.SkillDamageBonus(d, s.Avatar.HabAtk)
+		dano = clericAdjust(d, dano)
+		dano = warriorAdjust(s, d, dano)
+		dano, tipo = h.gunnerAdjust(d, dano, tipo, int(alvo.Avatar.DefFis))
+		dano = mageAdjust(d, dano, alvo.Avatar.CurMP)
+		if zeroDamage(d) {
+			dano = 0
+		}
 		dano = h.danoRuido(dano, rnd)
+		h.clericOnHit(alvo, d)
 	}
+	danoBruto := dano
 	if dano > 0 {
 		res := combat.ApplyToTarget(dano, tipo,
-			&sessionTarget{s: alvo, h: h}, &sessionTarget{s: s, h: h}, nil)
+			&sessionTarget{s: alvo, h: h}, &sessionTarget{s: s, h: h}, &alvo.DefesaPoints)
 		dano, tipo = res.Damage, res.Type
 		if res.Reflected > 0 {
 			h.applyDamage(s, res.Reflected)
+		}
+		dano = h.divineUnion(alvo, dano)
+		// Bolha: o golpe de skill que acerta e anulado, sem efeito de estado.
+		if h.bubbleBlocks(s, alvo, d) {
+			dano, tipo = 0, combat.None
+		}
+		dano = h.reactiveHit(s, alvo, dano, tipo, tipo != combat.Miss && tipo != combat.None)
+	}
+	efeito := tipo != combat.Miss && tipo != combat.None
+	if efeito {
+		if kind := debuffKind(d); kind != 0 && h.statusResisted(s, alvo, kind) {
+			efeito = false
 		}
 	}
 
@@ -359,9 +393,19 @@ func (h *Handler) skillSingleTarget(c *netsrv.Conn, s *Session, pkt packets.Send
 	if alvo.Dead {
 		h.onDeath(s, alvo)
 	}
-	// Skill com duracao tambem aplica o efeito no alvo.
-	if skillfn.IsBuff(d) && tipo != combat.Miss {
-		h.applyBuff(alvo, uint16(pkt.Skill))
+	if tipo != combat.Miss && tipo != combat.None {
+		h.gunnerOnHit(s, alvo, d, danoBruto, alvo.Dead)
+		h.mageOnHit(s, d, danoBruto)
+		h.areaOnHit(alvo, d)
+		h.markResoluto(alvo, d)
+	}
+	// Skill com duracao tambem aplica o efeito no alvo, se o golpe valeu e o
+	// alvo nao resistiu.
+	if skillfn.IsBuff(d) && efeito {
+		h.applyHitEffect(s, alvo, uint16(skill), d)
+	}
+	if efeito && isDash(d) {
+		h.dashTo(s, alvo.Position, skill)
 	}
 }
 
@@ -381,7 +425,12 @@ func (h *Handler) skillOnMob(c *netsrv.Conn, s *Session, mobID uint16, d *gameda
 	if !s.Position.InRange(m.Position, h.skillRange(d)) {
 		return
 	}
+	h.skillHitMob(c, s, m, sp, d)
+}
 
+// skillHitMob calcula e aplica o golpe de uma skill num mob. Parte comum do
+// alvo unico e da area.
+func (h *Handler) skillHitMob(c *netsrv.Conn, s *Session, m *Mob, sp *mobdata.Species, d *gamedata.T_SkillData) {
 	rnd := h.rand()
 	tipo := s.Roller.Roll(
 		combat.Attacker{
@@ -398,30 +447,36 @@ func (h *Handler) skillOnMob(c *netsrv.Conn, s *Session, mobID uint16, d *gameda
 
 	dano := 0
 	if tipo != combat.Miss {
-		atk := int(s.Avatar.AtkFis)
-		def := int(sp.DefFis)
-		if pen := int(s.Avatar.FisPenetration); pen > 0 {
-			def -= (def / 100) * pen
-		}
-		dano = atk - (def >> 3)
-		if dano <= 0 {
-			dano = 1
-		}
+		dano = h.skillMobBaseDamage(s, sp)
 		dano += skillfn.SkillDamageBonus(d, s.Avatar.HabAtk)
+		dano = clericAdjust(d, dano)
+		dano = warriorAdjust(s, d, dano)
+		dano, tipo = h.gunnerAdjust(d, dano, tipo, int(sp.DefFis))
+		if zeroDamage(d) {
+			dano = 0
+		}
 		dano = h.danoRuido(dano, rnd)
+		h.gunnerOnHit(s, nil, d, dano, false)
+		h.mageOnHit(s, d, dano)
 	}
 
 	morreu := h.Mobs.Hit(m, dano, s.ClientID, h.now())
 	h.broadcastMobDamage(s, m, tipo, dano)
 	if morreu {
 		h.onMobDeath(c, s, m, sp)
+	} else if tipo != combat.Miss && isDot(d) {
+		h.applyMobDot(s, m, d)
+	}
+	if tipo != combat.Miss && isDash(d) {
+		h.dashTo(s, m.Position, uint32(d.Index))
 	}
 }
 
 // skillBuff aplica uma skill de efeito em si mesmo ou no alvo.
 func (h *Handler) skillBuff(c *netsrv.Conn, s *Session, pkt packets.SendSkillUse, d *gamedata.T_SkillData) {
 	alvo := s
-	if pkt.Index != 0 && uint32(uint16(pkt.Index)) == pkt.Index {
+	// TargetType 1 e "em si mesmo" (HandleSkill: DataSkill.TargetType = 1).
+	if d.TargetType != 1 && pkt.Index != 0 && uint32(uint16(pkt.Index)) == pkt.Index {
 		id := uint16(pkt.Index)
 		if id != s.ClientID && !IsMobTarget(id) {
 			if outro, _, ok := h.Chan.Lookup(id); ok && outro.Status >= Playing {
@@ -431,22 +486,15 @@ func (h *Handler) skillBuff(c *netsrv.Conn, s *Session, pkt packets.SendSkillUse
 			}
 		}
 	}
-	h.applyBuff(alvo, uint16(pkt.Skill))
+	h.targetBuffSkill(s, alvo, uint16(pkt.Skill), d, d.TargetType == 1)
 	h.log().Debug("buff aplicado",
 		"skill", pkt.Skill, "de", s.Avatar.Name, "para", alvo.Avatar.Name)
 }
 
 // applyBuff poe o buff na entidade, respeitando o limite de 60 da origem.
 func (h *Handler) applyBuff(alvo *Session, skill uint16) {
-	if alvo.Base.Buffs == nil {
-		return
-	}
-	if !alvo.Base.Buffs.Set(skill, h.now()) {
-		// A origem, ao estourar o limite, mandava mensagem usando
-		// Players[ClientID] com ClientID podendo ser de mob: indice fora do
-		// vetor. Aqui o buff so nao entra.
-		h.log().Debug("limite de buffs atingido",
-			"cliente", alvo.ClientID, "skill", skill)
+	if !h.addBuff(alvo, skill) {
+		h.log().Debug("buff nao aplicado", "cliente", alvo.ClientID, "skill", skill)
 	}
 }
 

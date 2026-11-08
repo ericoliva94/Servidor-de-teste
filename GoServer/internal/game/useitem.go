@@ -214,6 +214,21 @@ func (h *Handler) useInventoryItem(ctx context.Context, c *netsrv.Conn,
 			return nil
 		}
 
+	case ItemTypePranFood:
+		if !h.feedPran(c, s, it.Index) {
+			return nil
+		}
+
+	case ItemTypePranDigest:
+		if !h.digestPran(c, s) {
+			return nil
+		}
+
+	case ItemTypeSetNation:
+		if efeito != itemEffectSetNation || !h.setAccountNation(ctx, c, s) {
+			return nil
+		}
+
 	case ItemTypeBagInv:
 		if !h.useInventoryBag(c, s, slot) {
 			return nil
@@ -236,6 +251,12 @@ func (h *Handler) useInventoryItem(ctx context.Context, c *netsrv.Conn,
 		h.sendStorage(c, s, StorageTypePlayer)
 
 	default:
+		if id, ok := itemTitles[it.Index]; ok {
+			if !h.addTitle(c, s, id, 1, true) {
+				return nil
+			}
+			break
+		}
 		h.message(c, "Este item ainda nao esta disponivel neste servidor.")
 		h.log().Info("tipo de item sem porte no uso",
 			"usuario", s.Username, "item", it.Index,

@@ -108,6 +108,9 @@ type Guild struct {
 	// tornar a guilda inteira nao-copiavel; Registry.Create e Registry.Put
 	// garantem que toda guilda do registro tem o seu.
 	Chest *Chest
+
+	// Ally e a aliança da guilda (cada guilda guarda uma copia da lista).
+	Ally Ally
 }
 
 // Capacity devolve quantos membros a guilda aguenta no nivel atual.
@@ -435,6 +438,7 @@ func (r *Registry) Create(nome string, nation uint8, leader Member) (*Guild, err
 		LeaderID: leader.CharIndex,
 		Chest:    NewChest(),
 	}
+	g.resetAlly()
 	// O mestre entra no rank 0 com todas as permissoes.
 	leader.Rank = RankLeader
 	leader.Name = truncate(leader.Name, MemberNameLen-1)
@@ -463,6 +467,7 @@ func (r *Registry) Put(g *Guild) {
 	if g.Chest == nil {
 		g.Chest = NewChest()
 	}
+	g.EnsureAlly()
 	r.byIndex[g.Index] = g
 	if n := normalize(g.Name); n != "" {
 		r.byName[n] = g.Index
@@ -580,6 +585,7 @@ func (r *Registry) destroyLocked(g *Guild) []uint32 {
 			delete(r.byName, n)
 		}
 	}
+	r.leaveAllianceLocked(g)
 	return soltos
 }
 

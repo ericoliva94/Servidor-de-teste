@@ -1,12 +1,17 @@
 package game
 
 import (
+	"aika/internal/charcreate"
+	"aika/internal/devir"
+	"aika/internal/nation"
+	"aika/internal/pran"
 	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"aika/internal/auction"
@@ -24,13 +29,14 @@ import (
 	"aika/internal/protocol"
 	"aika/internal/skillfn"
 	"aika/internal/store"
+	"aika/internal/titledata"
 )
 
 // Codigos de pacote do canal.
 const (
 	CodeCheckLogin = 0x685 // cliente -> servidor
 	CodeCharList   = 0x901 // servidor -> cliente
-	CodeClientMsg  = 0x100 // servidor -> cliente (mensagem de texto)
+	CodeClientMsg  = 0x984 // servidor -> cliente (mensagem de texto, PPacket_984 de Packets.pas)
 )
 
 // Offsets dos campos do $685 depois de decifrado, como CheckLogin os le a mao.
@@ -146,7 +152,60 @@ type Handler struct {
 	GuildDB   GuildStore
 	MailDB    MailStore
 	AuctionDB AuctionStore
-	Numerics  NumericStore
+	// ItemBarDB guarda a barra de atalhos e TeleportDB as posicoes de teleporte.
+	// Nil desliga a persistencia.
+	ItemBarDB  ItemBarStore
+	TeleportDB TeleportStore
+	// Devir e o estado dos templos da nacao deste servidor e DevirDB a sua
+	// persistencia. Nil desliga reliquias e devires.
+	Devir   *devir.Registry
+	DevirDB DevirStore
+	// Nations guarda tesouro, taxas e guildas de grade das tres nacoes e
+	// NationDB a persistencia. Nil desliga as informacoes de nacao.
+	Nations  *nation.Registry
+	NationDB NationStore
+	// CharCreate grava personagens novos e Templates sao os modelos de classe
+	// (BaseAccs). Sem eles a criacao e recusada com aviso.
+	CharCreate CharacterCreator
+	Templates  [charcreate.NumClasses]charcreate.Template
+	// CharDelete marca e conclui a exclusao de personagens. Nil so mexe na
+	// memoria da sessao.
+	CharDelete CharacterDeleter
+	// CharSave grava o progresso do personagem. Nil desliga a gravacao.
+	CharSave CharacterSaver
+	// FriendDB guarda as amizades. Nil mantem a lista so em memoria.
+	FriendDB FriendStore
+	// CouponDB resgata cupons. Nil responde Cupom indisponivel.
+	CouponDB CouponStore
+	// PranDB guarda os nomes das prans. Nil responde Pran indisponivel.
+	PranDB PranStore
+	// TitleDB guarda os titulos do personagem e TitleTable e o Title.bin. Nil
+	// deixa o jogador sem titulos.
+	TitleDB TitleStore
+	// EventDB guarda os itens de evento e o premio diario. Nil responde que nao
+	// ha itens.
+	EventDB    EventStore
+	TitleTable *titledata.Table
+	// Handoffs e ChannelStatus ligam os canais do processo na troca de canal.
+	// Nil recusa a troca.
+	Handoffs *Handoffs
+	// moved liga a chave de um grupo que viajou ao grupo refeito neste canal.
+	moved         map[uint32]uint16
+	movedMu       sync.Mutex
+	ChannelStatus func(id uint8) ChannelState
+	// GMDB guarda as contas de painel; nil desliga a ferramenta de GM. Channels
+	// sao todos os canais do processo (o painel age em qualquer um).
+	GMDB       GMStore
+	GMCmds     GMCommandStore
+	GMFounders GMFounderStore
+	// Nation e a nacao do canal (NationIndex do SL.bin); zero = o canal nao da
+	// nacao. AccountNation grava a escolha de nacao da conta.
+	Nation        uint8
+	AccountNation AccountNationStore
+	Channels      []*Handler
+	// PranIDs reparte os ClientID das prans em jogo.
+	PranIDs  *pran.IDs
+	Numerics NumericStore
 	// Chan e o registro de quem esta conectado a este canal.
 	Chan *Channel
 	// Mobs e o mundo de mobs deste canal.
@@ -162,18 +221,31 @@ type Handler struct {
 	// MapObjs guarda os objetos no chao.
 	MapObjs *MapObjects
 
+	// dots guarda o dano continuo em mobs (jogadores guardam o seu na sessao).
+	dots dotRegistry
+
+	// duelSeq numera as bandeiras de duelo.
+	duelSeq duelSeq
+
 	// Dungeons guarda as instancias de dungeon abertas e DungeonLobbies as
 	// telas de confirmacao. DungeonTable e a tabela carregada dos CSV.
 	Dungeons       *dungeon.Registry
 	DungeonLobbies *dungeon.Lobbies
 	DungeonTable   DungeonTable
+	// MutantTest liga o MODO DE TESTE dos mutantes do nivel 60 (drop de acessorio
+	// e defesa reduzida). Nil por padrao.
+	MutantTest *MutantTest
 	// DropRateBonus e o efeito de reliquia que empurra o sorteio para as
 	// raridades maiores.
 	DropRateBonus uint16
 	// Exp e a tabela de experiencia por nivel (ExpList).
 	Exp ExpTable
+	// PranExp e a PranExpList (experiencia por nivel da pran).
+	PranExp []uint32
 	// ExpMultiplier e o EXP_MULTIPLIER do .ini; zero usa 1.
 	ExpMultiplier uint16
+	// RateEffect5 e o RATE_EFFECT5 do .ini; zero usa 10, como GlobalDefs.pas.
+	RateEffect5 uint16
 	// Atributos de defesa que todo mob tem, do .ini: MOB_ESQUIVA,
 	// MOB_CRIT_RES e MOB_DUPLO_RES.
 	MobEsquiva  uint16
@@ -325,6 +397,156 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.sendGift(ctx, c, s, p)
 	case CodeUnsealItem:
 		return h.unsealItem(ctx, c, s, p)
+	case CodeGuildAllyRequest:
+		return h.requestGuildAlly(ctx, c, s, p)
+	case CodeUpdateNationTaxes:
+		return h.updateNationTaxes(ctx, c, s, p)
+	case CodeNationGold:
+		return h.updateNationGold(c, s, p)
+	case CodeRequestDevirInfo:
+		return h.requestDevirInfo(ctx, c, s, p)
+	case CodeMoveToReliquary:
+		return h.moveToReliquary(ctx, c, s, p)
+	case CodeTradeRequest:
+		return h.tradeRequest(ctx, c, s, p)
+	case CodeTradeResponse:
+		return h.tradeResponse(ctx, c, s, p)
+	case CodeTradeRefresh:
+		return h.tradeRefresh(ctx, c, s, p)
+	case CodeTradeCancel:
+		return h.tradeCancel(ctx, c, s, p)
+	case CodeChangeChannel:
+		return h.changeChannel(ctx, c, s, p)
+	case CodeLoginIntoChannel:
+		return h.loginIntoChannel(ctx, c, s, p)
+	case CodeSendToWorldSends:
+		return h.sendToWorldSends(ctx, c, s, p)
+	case CodeGMLogin:
+		return h.gmLogin(ctx, c, s, p)
+	case CodeGMMove:
+		return h.gmMove(ctx, c, s, p)
+	case CodeGMChat:
+		return h.gmChat(ctx, c, s, p)
+	case CodeGMGold:
+		return h.gmGold(ctx, c, s, p)
+	case CodeGMCash:
+		return h.gmCash(ctx, c, s, p)
+	case CodeGMDisconnect:
+		return h.gmDisconnect(ctx, c, s, p)
+	case CodeGMLevel:
+		return h.gmLevel(ctx, c, s, p)
+	case CodeGMBuffs:
+		return h.gmBuffs(ctx, c, s, p)
+	case CodeGMBan:
+		return h.gmBan(ctx, c, s, p)
+	case CodeGMRequestPending:
+		return h.gmRequestPending(ctx, c, s, p)
+	case CodeGMApprove:
+		return h.gmApprove(ctx, c, s, p)
+	case CodeGMReprove:
+		return h.gmReprove(ctx, c, s, p)
+	case CodeGMCreateCoupon:
+		return h.gmCreateCoupon(ctx, c, s, p)
+	case CodeGMRequestNames:
+		return h.gmRequestNames(ctx, c, s, p)
+	case CodeGMEffect:
+		return h.gmEffect(ctx, c, s, p)
+	case CodeGMFounderByID:
+		return h.gmFounderByID(ctx, c, s, p)
+	case CodeGMFounderByName:
+		return h.gmFounderByName(ctx, c, s, p)
+	case CodeGMFounderCreate:
+		return h.gmFounderCreate(ctx, c, s, p)
+	case CodeGMFounderOK:
+		return h.gmFounderValidate(ctx, c, s, p)
+	case CodeGMResetPrans:
+		return h.gmResetPrans(ctx, c, s, p)
+	case CodeGMEventItem:
+		return h.gmEventItem(ctx, c, s, p)
+	case CodeGMEventItemAll:
+		return h.gmEventItemAll(ctx, c, s, p)
+	case CodeReceiveEventItem:
+		return h.receiveEventItem(ctx, c, s, p)
+	case CodeUpdateActiveTitle:
+		return h.updateActiveTitle(ctx, c, s, p)
+	case CodeRenamePran:
+		return h.renamePran(ctx, c, s, p)
+	case CodeReclaimCoupon:
+		return h.reclaimCoupon(ctx, c, s, p)
+	case CodeDuelRequest:
+		return h.requestDuel(ctx, c, s, p)
+	case CodeDuelResponse:
+		return h.answerDuel(ctx, c, s, p)
+	case CodeSendRaid:
+		return h.sendRaid(ctx, c, s, p)
+	case CodeAcceptRaid:
+		return h.acceptRaid(ctx, c, s, p)
+	case CodeExitRaid:
+		return h.exitRaid(ctx, c, s, p)
+	case CodeGiveLeaderRaid:
+		return h.giveLeaderRaid(ctx, c, s, p)
+	case CodeShopCreate:
+		return h.createShop(ctx, c, s, p)
+	case CodeShopOpen:
+		return h.openShop(ctx, c, s, p)
+	case CodeShopBuy:
+		return h.buyShopItem(ctx, c, s, p)
+	case CodeUpdateMemberPosition:
+		return h.updateMemberPosition(ctx, c, s, p)
+	case CodeCreateCharacter:
+		return h.createCharacter(ctx, c, s, p)
+	case CodeRequestDeleteChar:
+		return h.requestDeleteChar(ctx, c, s, p)
+	case CodeDeleteChar:
+		return h.deleteChar(ctx, c, s, p)
+	case CodeItemLink:
+		return h.itemLink(ctx, c, s, p)
+	case CodeChangeItemBar:
+		return h.changeItemBar(ctx, c, s, p)
+	case CodeSetTeleport:
+		return h.setTeleport(ctx, c, s, p)
+	case CodeAllAttributes:
+		return h.requestAllAttributes(ctx, c, s, p)
+	case CodeAllAttributesTarget:
+		return h.requestAllAttributesTarget(ctx, c, s, p)
+	case CodeRequestCash:
+		return h.requestCash(ctx, c, s, p)
+	case CodeBackToCharList:
+		return h.backToCharList(ctx, c, s, p)
+	case CodeGetStatusPoint:
+		return h.getStatusPoint(ctx, c, s, p)
+	case CodeUpdateAction:
+		return h.updateAction(ctx, c, s, p)
+	case CodePKMode:
+		return h.pkMode(ctx, c, s, p)
+	case CodeRemoveBuff:
+		return h.removeBuff(ctx, c, s, p)
+	case CodeRequestPing:
+		return h.requestPing(ctx, c, s, p)
+	case CodeMakeItem:
+		return h.makeItem(ctx, c, s, p)
+	case CodeRepairItems:
+		return h.repairItems(ctx, c, s, p)
+	case CodeChangeItemAttribute:
+		return h.changeItemAttribute(ctx, c, s, p)
+	case CodeRenewItem, CodeRenewItemPran:
+		return h.renewItem(ctx, c, s, p)
+	case CodeAgroupItem:
+		return h.agroupItem(ctx, c, s, p)
+	case CodeUngroupItem:
+		return h.ungroupItem(ctx, c, s, p)
+	case CodeAddFriend:
+		return h.addFriend(ctx, c, s, p)
+	case CodeAddFriendResponse:
+		return h.addFriendResponse(ctx, c, s, p)
+	case CodeDeleteFriend:
+		return h.deleteFriend(ctx, c, s, p)
+	case CodeOpenFriendWindow:
+		return h.openFriendWindow(ctx, c, s, p)
+	case CodeCloseFriendWindow:
+		return h.closeFriendWindow(ctx, c, s, p)
+	case CodeFriendSay:
+		return h.friendSay(ctx, c, s, p)
 	default:
 		// O original caia no fim do case sem ramo e seguia sem responder. Aqui
 		// o codigo desconhecido e registrado, o que torna visivel o que falta
@@ -446,14 +668,29 @@ func (h *Handler) OnDisconnect(c *netsrv.Conn) {
 		// Gravar antes de tirar da lista: os itens mudaram em memoria e nada
 		// mais vai ler esta sessao depois daqui.
 		h.saveItems(s)
+		h.saveCharacter(s)
+		h.saveItemBar(s)
+		h.savePrans(s)
+		h.saveTitles(s)
+		h.pranOnDisconnect(s)
 		h.chestOnDisconnect(s)
 		h.guildOnDisconnect(s)
 		h.dungeonOnDisconnect(s)
+		h.friendsOnDisconnect(s)
+		h.tradeOnDisconnect(s)
+		h.shopOnDisconnect(s)
+		h.duelOnDisconnect(s)
 		h.leaveParty(s)
 		h.removeFromEveryone(s)
 	}
 	if h.Chan != nil && s.ClientID != 0 {
 		h.Chan.Leave(s.ClientID)
+	}
+	// Em troca de canal o personagem ja foi gravado acima: libera o canal novo,
+	// que esta esperando para le-lo.
+	if s.handoffAccount != 0 && h.Handoffs != nil {
+		h.Handoffs.Saved(s.handoffAccount)
+		s.handoffAccount = 0
 	}
 	s.Status = WaitingLogin
 	if s.Username != "" {
@@ -518,9 +755,37 @@ func (h *Handler) sendCharList(c *netsrv.Conn, s *Session) error {
 	return c.SendStruct(CodeCharList, pkt)
 }
 
-// message envia uma mensagem de texto ao cliente.
+// clientMessage e o TClientMessagePacket como a origem o enviava: 144 bytes.
+// O record tem `Msg: string[128]` (129 bytes), mas SendClientMessage grava
+// Header.size := 144, entao o ultimo byte nunca vai e o texto cabe em 127
+// caracteres mais o terminador.
+type clientMessage struct {
+	Header packets.PacketHeader
+	Null   uint8
+	Type1  uint8
+	Type2  uint8
+	Null1  uint8
+	Msg    [128]byte
+}
+
+// MsgYellow e o MsgType padrao de SendClientMessage (16, mensagem amarela).
+const MsgYellow = 16
+
+// message envia uma mensagem de texto ao cliente, no tipo padrao da origem.
 func (h *Handler) message(c *netsrv.Conn, msg string) {
-	var pkt packets.ClientMessagePacket
+	h.messageType(c, msg, MsgYellow)
+}
+
+// messageType envia uma mensagem com o MsgType dado.
+func (h *Handler) messageType(c *netsrv.Conn, msg string, tipo uint8) {
+	if c == nil {
+		return
+	}
+	var pkt clientMessage
+	pkt.Type1 = tipo
+	if len(msg) > len(pkt.Msg)-1 {
+		msg = msg[:len(pkt.Msg)-1]
+	}
 	netsrv.PutCString(pkt.Msg[:], msg)
 	if err := c.SendStruct(CodeClientMsg, pkt); err != nil {
 		h.log().Debug("falha ao enviar mensagem ao cliente",

@@ -171,6 +171,47 @@ func EquippedHPMPInc(t Tabelas, equip []model.Item) int {
 	return total
 }
 
+// EquipStats e a soma de ataque e defesa dos itens vestidos.
+type EquipStats struct {
+	AtkFis, AtkMag, DefFis, DefMag int
+}
+
+// EquippedStats porta GetEquipDamage (arma, slot 6) e GetEquipsDefense
+// (slots 2 a 7, sem o 6) de BaseMob.pas. Item sem durabilidade (Min = 0) nao
+// conta, como na origem.
+//
+// Divergencia: a origem, com Refi >= 16 e item sem prazo, troca o valor da
+// tabela de itens pelo de Reinforce2[...].Attribute*[refino-1]. Esse indice
+// (GetItemReinforce2Index) ainda nao foi portado, entao o item refinado conta
+// com o valor base da tabela de itens, que e o piso do valor real.
+func EquippedStats(t Tabelas, equip []model.Item) EquipStats {
+	var out EquipStats
+	if t == nil {
+		return out
+	}
+	for slot := SlotHelmet; slot <= SlotShield; slot++ {
+		if slot >= len(equip) {
+			break
+		}
+		it := equip[slot]
+		if it.IsEmpty() || it.Min == 0 {
+			continue
+		}
+		d := t.Item(int(it.Index))
+		if d == nil {
+			continue
+		}
+		if slot == SlotRing { // slot 6, a arma
+			out.AtkFis += int(d.ATKFis)
+			out.AtkMag += int(d.MagATK)
+			continue
+		}
+		out.DefFis += int(d.DefFis)
+		out.DefMag += int(d.DefMag)
+	}
+	return out
+}
+
 // MaxSlotAmount e o MAX_SLOT_AMOUNT de GlobalDefs.pas: o maior empilhamento
 // num slot.
 const MaxSlotAmount = 1000

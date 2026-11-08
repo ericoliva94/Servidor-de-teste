@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -163,13 +164,23 @@ func (s *Server) Close() error {
 	return s.http.Close()
 }
 
+// formValues junta a query string e o corpo application/x-www-form-urlencoded.
+// O launcher do Aika Global envia id e pw por POST, no corpo; so a query
+// string (r.URL.Query) deixava o login sempre em "conta nao encontrada".
+// O corpo e limitado a 4 KiB.
+func formValues(w http.ResponseWriter, r *http.Request) url.Values {
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	_ = r.ParseForm()
+	return r.Form
+}
+
 // handleGetToken e o porte de TAuthHandlers.AikaGetToken.
 //
 // O original lia os parametros por posicao (Params[0] como "id=" e Params[1]
 // como "pw="), entao a ordem na query string mudava o resultado e um
 // parametro a mais quebrava o login. Aqui sao lidos por nome.
 func (s *Server) handleGetToken(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+	q := formValues(w, r)
 	username := strings.ToLower(strings.TrimSpace(q.Get("id")))
 	password := strings.TrimSpace(q.Get("pw"))
 
@@ -248,7 +259,7 @@ func (s *Server) handleGetToken(w http.ResponseWriter, r *http.Request) {
 
 // handleCharCount e o porte de TAuthHandlers.AikaGetChrCnt.
 func (s *Server) handleCharCount(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+	q := formValues(w, r)
 	username := strings.ToLower(strings.TrimSpace(q.Get("id")))
 	password := strings.TrimSpace(q.Get("pw"))
 
@@ -288,7 +299,7 @@ func (s *Server) handleServerList(w http.ResponseWriter, r *http.Request) {
 // handleResetFlag e o porte de TAuthHandlers.AikaResetFlag: marca a conta
 // como fora do jogo para o cliente poder reconectar.
 func (s *Server) handleResetFlag(w http.ResponseWriter, r *http.Request) {
-	username := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("id")))
+	username := strings.ToLower(strings.TrimSpace(formValues(w, r).Get("id")))
 	if username == "" {
 		s.reply(w, RespAccountNotFound)
 		return

@@ -446,10 +446,10 @@ func init() {
 			if erro != "" {
 				return erro
 			}
-			if s.Base.Buffs == nil || !s.Base.Buffs.Remove(uint16(idx)) {
+			if s.Base.Buffs == nil || !h.removeBuffAndNotify(s, uint16(idx)) {
 				return fmt.Sprintf("%s nao tem o buff %d.", s.Avatar.Name, idx)
 			}
-			h.sendStatus(conn, s)
+			_ = conn
 			return fmt.Sprintf("Buff %d removido de %s.", idx, s.Avatar.Name)
 		},
 	})

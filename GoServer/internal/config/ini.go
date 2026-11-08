@@ -107,6 +107,10 @@ type Server struct {
 
 	// ExpMultiplier e o EXP_MULTIPLIER de GAMESERVERCONF.
 	ExpMultiplier uint16
+	// RateEffect5 e o RATE_EFFECT5 de GAMESERVERCONF: a chance, em pontos
+	// percentuais por slot de efeito, de um golpe disparar a skill de efeito
+	// do conjunto (padrao 10, como em GlobalDefs.pas).
+	RateEffect5 uint16
 	// Atributos de defesa de todo mob: MOB_ESQUIVA, MOB_CRIT_RES e
 	// MOB_DUPLO_RES.
 	MobEsquiva  uint16
@@ -166,6 +170,7 @@ func FromINI(ini *INI) Server {
 		DistanceToForget: clampDistance(ini.Int("GAMESERVERCONF", "DISTANCE_TO_FORGET", 60)),
 
 		ExpMultiplier: clampDistance(ini.Int("GAMESERVERCONF", "EXP_MULTIPLIER", 1)),
+		RateEffect5:   clampDistance(ini.Int("GAMESERVERCONF", "RATE_EFFECT5", 10)),
 		MobEsquiva:    clampDistance(ini.Int("GAMESERVERCONF", "MOB_ESQUIVA", 0)),
 		MobCritRes:    clampDistance(ini.Int("GAMESERVERCONF", "MOB_CRIT_RES", 0)),
 		MobDuploRes:   clampDistance(ini.Int("GAMESERVERCONF", "MOB_DUPLO_RES", 0)),

@@ -9,6 +9,7 @@ import (
 	"aika/internal/model"
 	"aika/internal/netsrv"
 	"aika/internal/packets"
+	"aika/internal/pran"
 	"aika/internal/protocol"
 	"aika/internal/stats"
 	"aika/internal/store"
@@ -122,6 +123,7 @@ func (h *Handler) moveItem(ctx context.Context, c *netsrv.Conn, s *Session, p pr
 		return nil
 	}
 
+	spawnPran, unspawnPran := pranMoveIntent(s, pkt, *src, *dest, itemfn.ItemType(h.data(), src.Index) == itemfn.ItemTypePran)
 	equipando := pkt.DestType == store.SlotTypeEquip
 	desequipando := pkt.SrcType == store.SlotTypeEquip
 
@@ -139,6 +141,10 @@ func (h *Handler) moveItem(ctx context.Context, c *netsrv.Conn, s *Session, p pr
 			h.respawnToVisible(s)
 		}
 	}
+	if pranEquipMoved(pkt) {
+		h.afterPranEquipMove(c, s)
+	}
+	h.applyPranMove(c, s, spawnPran, unspawnPran)
 	return nil
 }
 
@@ -165,8 +171,6 @@ func (h *Handler) itemPortado(itens ...model.Item) (string, bool) {
 			continue
 		}
 		switch itemfn.ItemType(t, it.Index) {
-		case itemfn.ItemTypePran:
-			return "Pran ainda nao esta disponivel neste servidor.", false
 		case itemfn.ItemTypePet:
 			return "Mascote ainda nao esta disponivel neste servidor.", false
 		}
@@ -194,6 +198,12 @@ func (h *Handler) resolveSlot(c *netsrv.Conn, s *Session, tipo, slot int, origem
 		// A bolsa que cobre o slot tem de estar no inventario, como na
 		// origem ("if Inventory[SrcBag].Index <= 0 then Exit").
 		bolsa := inventoryBagSlot(slot)
+		if bolsa == slotBolsaInicial && s.Inventory.Get(bolsa).IsEmpty() {
+			// A bolsa inicial nunca falta de verdade: sem ela os 15 primeiros slots
+			// ficam inacessiveis. Refaz, como o carregamento da origem faz.
+			garantirBolsaInicial(&s.Inventory)
+			h.sendRefreshItem(c, s, store.SlotTypeInventory, slotBolsaInicial, s.Inventory.Get(bolsa))
+		}
 		if bolsa < 0 || s.Inventory.Get(bolsa).IsEmpty() {
 			return nil, ErrBolsaAusente
 		}
@@ -221,11 +231,11 @@ func (h *Handler) resolveSlot(c *netsrv.Conn, s *Session, tipo, slot int, origem
 			return nil, ErrSlotInvalido
 		}
 		if slot >= StorageItemSlots {
-			// 84 e 85 sao a central de pran, que a origem so deixava receber
-			// item de ItemType 10 — e o pran nao esta portado. 80..83 sao as
-			// expansoes, que a origem nao deixava arrastar.
-			if slot == StorageFirstPranSlot || slot == StorageLastPranSlot {
-				return nil, ErrPranNotPorted
+			// 84 e 85 sao a central de pran: so recebem e entregam item de
+			// ItemType 10 (conferido em podeTrocar). 80..83 sao as expansoes, que a
+			// origem nao deixava arrastar.
+			if (slot == StorageFirstPranSlot || slot == StorageLastPranSlot) && slot < len(s.Storage.Slots) {
+				return &s.Storage.Slots[slot], nil
 			}
 			return nil, ErrSlotInvalido
 		}
@@ -240,6 +250,9 @@ func (h *Handler) resolveSlot(c *netsrv.Conn, s *Session, tipo, slot int, origem
 		}
 		return &s.Storage.Slots[slot], nil
 
+	case store.SlotTypePranEquip, store.SlotTypePranInv:
+		return h.resolvePranSlot(s, tipo, slot)
+
 	default:
 		return nil, ErrTipoSlotInvalido
 	}
@@ -250,6 +263,16 @@ func (h *Handler) podeTrocar(c *netsrv.Conn, s *Session, pkt packets.MoveItemPac
 	// Pran e mascote dependem de sistemas que ainda nao estao portados.
 	if m, pode := h.itemPortado(src, dest); !pode {
 		h.message(c, m)
+		return false
+	}
+
+	// A central de pran (armazem 84 e 85) so troca item de ItemType 10.
+	if !h.centralPranOk(pkt, src) {
+		return false
+	}
+
+	// Equipamento e bolsa da pran.
+	if !h.podeTrocarPran(s, pkt, src, dest) {
 		return false
 	}
 
@@ -285,6 +308,10 @@ func (h *Handler) podeVestir(c *netsrv.Conn, s *Session, it model.Item, slot int
 	// A origem comparava GetMobClass() com GetMobClass(ItemList[].Classe):
 	// item de classe 0 cai na classe do guerreiro, e nao em "sem restricao".
 	// Mantido, porque e o que decide o que cada classe veste hoje.
+	// A pran nao tem classe: a origem so conferia a classe dos outros itens.
+	if itemfn.ItemType(t, it.Index) == itemfn.ItemTypePran {
+		return true
+	}
 	classeItem := itemfn.ItemClass(t, it.Index)
 	if stats.MobClass(s.Avatar.ClassInfo) != stats.MobClass(classeItem) {
 		h.message(c, "Sua classe nao pode usar este item.")
@@ -319,7 +346,21 @@ func (h *Handler) deleteItem(ctx context.Context, c *netsrv.Conn, s *Session, p 
 		if pkt.Slot >= store.InventorySlots || int(pkt.Slot) >= len(s.Inventory.Slots) {
 			return nil
 		}
+		if pkt.Slot == slotBolsaInicial {
+			// A bolsa do slot 60 e a que da os 15 primeiros slots: sem ela o moveItem
+			// recusa tudo e o inventario inteiro fica inacessivel. A origem a deixava
+			// ser apagada (e so a recriava no proximo login).
+			h.message(c, "A bolsa inicial não pode ser descartada.")
+			return nil
+		}
 		it = &s.Inventory.Slots[pkt.Slot]
+	case store.SlotTypePranInv:
+		// Bolsa da pran invocada, slots 0 a 41 (as duas bolsas inclusive).
+		i, ok := activePran(s)
+		if !ok || pkt.Slot >= pran.InventorySlots {
+			return nil
+		}
+		it = &s.Prans[i].Inventory[pkt.Slot]
 	default:
 		return nil
 	}

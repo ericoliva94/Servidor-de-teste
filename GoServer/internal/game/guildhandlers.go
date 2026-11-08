@@ -487,6 +487,10 @@ func (h *Handler) sendGuildInfo(c *netsrv.Conn, s *Session, g *guild.Guild) {
 		}
 	}
 	netsrv.PutCString(pkt.Site[:], g.Site)
+	for i, it := range g.Ally.Guilds {
+		pkt.GuildsAlly[i].Index = it.Index
+		netsrv.PutCString(pkt.GuildsAlly[i].Name[:], it.Name)
+	}
 	pkt.Exp = g.Exp
 	pkt.Level = g.Level
 	pkt.RanksConfig = g.RanksConfig

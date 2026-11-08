@@ -30,7 +30,9 @@ func (g Guilds) All(ctx context.Context) ([]*guild.Guild, []string, error) {
 	const q = `SELECT id, name, nation, exp, level, leader_char_index,
 	                  notice1, notice2, notice3, site, ranks_config,
 	                  bravure_points, skill_points, promote,
-	                  COALESCE(storage_gold, 0) AS storage_gold
+	                  COALESCE(storage_gold, 0) AS storage_gold,
+	                  ally_leader, guild_ally1_index, guild_ally1_name, guild_ally2_index, guild_ally2_name,
+	                  guild_ally3_index, guild_ally3_name, guild_ally4_index, guild_ally4_name
 	             FROM guilds
 	            ORDER BY id
 	            LIMIT 10000`
@@ -52,10 +54,15 @@ func (g Guilds) All(ctx context.Context) ([]*guild.Guild, []string, error) {
 			bravura, skillPts  int64
 			promote            int64
 			ouroBau            int64
+			allyLeader         int64
+			allyIdx            [4]int64
+			allyName           [4]sql.NullString
 		)
 		if err := rows.Scan(&id, &nome, &nation, &exp, &nivel, &lider,
 			&n1, &n2, &n3, &site, &ranks,
-			&bravura, &skillPts, &promote, &ouroBau); err != nil {
+			&bravura, &skillPts, &promote, &ouroBau,
+			&allyLeader, &allyIdx[0], &allyName[0], &allyIdx[1], &allyName[1],
+			&allyIdx[2], &allyName[2], &allyIdx[3], &allyName[3]); err != nil {
 			rows.Close()
 			return nil, avisos, fmt.Errorf("store: ler guilda: %w", err)
 		}
@@ -91,6 +98,10 @@ func (g Guilds) All(ctx context.Context) ([]*guild.Guild, []string, error) {
 			avisos = append(avisos, fmt.Sprintf(
 				"guilda %d com nivel %d fora de 0..%d, limitado a %d",
 				id, nivel, guild.MaxLevel, gd.Level))
+		}
+		gd.Ally.Leader = uint16(clampToWord(allyLeader))
+		for i := range gd.Ally.Guilds {
+			gd.Ally.Guilds[i] = guild.AllyItem{Index: uint16(clampToWord(allyIdx[i])), Name: allyName[i].String}
 		}
 		gd.SetNotices(n1.String, n2.String, n3.String)
 		gd.SetSite(site.String)
@@ -200,8 +211,10 @@ func (g Guilds) Save(ctx context.Context, gd *guild.Guild) error {
 	const up = `INSERT INTO guilds
 		(id, name, nation, exp, level, leader_char_index,
 		 notice1, notice2, notice3, site, ranks_config,
-		 bravure_points, skill_points, promote, storage_gold)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 bravure_points, skill_points, promote, storage_gold,
+		 ally_leader, guild_ally1_index, guild_ally1_name, guild_ally2_index, guild_ally2_name,
+		 guild_ally3_index, guild_ally3_name, guild_ally4_index, guild_ally4_name)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON DUPLICATE KEY UPDATE
 		 name=VALUES(name), nation=VALUES(nation), exp=VALUES(exp),
 		 level=VALUES(level), leader_char_index=VALUES(leader_char_index),
@@ -210,7 +223,12 @@ func (g Guilds) Save(ctx context.Context, gd *guild.Guild) error {
 		 ranks_config=VALUES(ranks_config),
 		 bravure_points=VALUES(bravure_points),
 		 skill_points=VALUES(skill_points), promote=VALUES(promote),
-		 storage_gold=VALUES(storage_gold)`
+		 storage_gold=VALUES(storage_gold),
+		 ally_leader=VALUES(ally_leader),
+		 guild_ally1_index=VALUES(guild_ally1_index), guild_ally1_name=VALUES(guild_ally1_name),
+		 guild_ally2_index=VALUES(guild_ally2_index), guild_ally2_name=VALUES(guild_ally2_name),
+		 guild_ally3_index=VALUES(guild_ally3_index), guild_ally3_name=VALUES(guild_ally3_name),
+		 guild_ally4_index=VALUES(guild_ally4_index), guild_ally4_name=VALUES(guild_ally4_name)`
 
 	promote := 0
 	if gd.Promote {
@@ -221,7 +239,10 @@ func (g Guilds) Save(ctx context.Context, gd *guild.Guild) error {
 		gd.Notices[0], gd.Notices[1], gd.Notices[2], gd.Site,
 		formatRanksConfig(gd.RanksConfig[:]),
 		gd.BravurePoints, gd.SkillPoints, promote,
-		gd.Chest.Gold()); err != nil {
+		gd.Chest.Gold(),
+		gd.Ally.Leader,
+		gd.Ally.Guilds[0].Index, gd.Ally.Guilds[0].Name, gd.Ally.Guilds[1].Index, gd.Ally.Guilds[1].Name,
+		gd.Ally.Guilds[2].Index, gd.Ally.Guilds[2].Name, gd.Ally.Guilds[3].Index, gd.Ally.Guilds[3].Name); err != nil {
 		return fmt.Errorf("store: gravar guilda %d: %w", gd.Index, err)
 	}
 

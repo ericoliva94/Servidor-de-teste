@@ -176,3 +176,21 @@ func TestResistenceUsaRound(t *testing.T) {
 			d.Resistence)
 	}
 }
+
+// A reliquia de dano e um SEGUNDO passo percentual, sobre o valor que ja
+// recebeu o primeiro (BaseMob.pas, "{ Reliquia }" depois de EF_PER_DAMAGE1).
+func TestRelicDanoComporComOPercentualNormal(t *testing.T) {
+	sc := Score{Str: 100}
+	base := Compute(sc, Bonus{}).AtkFis // 260
+	so := Compute(sc, Bonus{AtkFisPercent: 10}).AtkFis
+	ambos := Compute(sc, Bonus{AtkFisPercent: 10, RelicAtkFisPercent: 10}).AtkFis
+	if base != 260 || so != 280 {
+		t.Fatalf("base=%d so=%d", base, so)
+	}
+	if want := uint16(280 + 10*(280/100)); ambos != want {
+		t.Errorf("com reliquia = %d, queria %d", ambos, want)
+	}
+	if m := Compute(Score{Int: 100}, Bonus{RelicAtkMagPercent: 10}).AtkMag; m != 320+10*3 {
+		t.Errorf("magico = %d", m)
+	}
+}

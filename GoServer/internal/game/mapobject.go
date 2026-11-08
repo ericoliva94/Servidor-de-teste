@@ -215,11 +215,22 @@ func (h *Handler) dropFromMob(c *netsrv.Conn, s *Session, m *Mob, dropIndex uint
 	}
 
 	rnd := h.rand()
+	if item, ok := h.mutantTestDrop(m); ok {
+		h.log().Info("MODO DE TESTE: acessorio forcado no drop",
+			"item", item, "mob", m.ClientID, "especie", m.Species, "para", s.Avatar.Name)
+		h.placeDrop(m, s, item, dropdata.Legendary)
+		return
+	}
 	item, raridade, ok := cat.Roll(rnd.IntN(dropdata.RollMax)+1, int(h.DropRateBonus), rnd)
 	if !ok {
 		return
 	}
+	h.placeDrop(m, s, item, raridade)
+}
 
+// placeDrop poe o item sorteado no chao, onde o mob morreu, e desenha para
+// quem esta perto.
+func (h *Handler) placeDrop(m *Mob, s *Session, item uint16, raridade dropdata.Rarity) {
 	obj := &MapObject{
 		Position:    m.Position,
 		ContentType: ObjectBoxItem,

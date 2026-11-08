@@ -77,6 +77,7 @@ type PartyRegistry struct {
 	mu       sync.Mutex
 	parties  map[uint16]*Party
 	byMember map[uint16]uint16 // ClientID -> indice do grupo
+	raids    map[uint16]*Raid
 	nextHint uint16
 	max      uint16
 }
@@ -256,6 +257,7 @@ func (r *PartyRegistry) destroyLocked(p *Party) []uint16 {
 	if _, ok := r.parties[p.Index]; !ok {
 		return nil
 	}
+	r.leaveRaidLocked(p.Index)
 	soltos := make([]uint16, len(p.Members))
 	copy(soltos, p.Members)
 	for _, id := range p.Members {

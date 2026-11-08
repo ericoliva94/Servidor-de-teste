@@ -117,6 +117,7 @@ func (c *Conn) sendRaw(buf []byte) error {
 	}
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	traceTx(c.log, c.ip, buf)
 
 	if c.writeTimeout > 0 {
 		if err := c.nc.SetWriteDeadline(time.Now().Add(c.writeTimeout)); err != nil {

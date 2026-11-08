@@ -49,6 +49,17 @@ type Bonus struct {
 	// AtkFisPercent e AtkMagPercent sao EF_PER_DAMAGE1 e 2, em pontos
 	// percentuais sobre o valor ja somado.
 	AtkFisPercent, AtkMagPercent int
+	// RelicAtkFisPercent e RelicAtkMagPercent sao EF_RELIQUE_PER_DAMAGE1 e 2: na
+	// origem um SEGUNDO passo percentual, aplicado ao valor que ja recebeu o
+	// primeiro (os dois se compoem).
+	RelicAtkFisPercent, RelicAtkMagPercent int
+	// AtkFisFlat, AtkMagFlat (EF_DAMAGE1 e 2) e DefFisFlat, DefMagFlat
+	// (EF_RESISTANCE1 e 2) somam DEPOIS dos passos percentuais, como na origem.
+	AtkFisFlat, AtkMagFlat, DefFisFlat, DefMagFlat int
+	// PranAtkFis e PranAtkMag (EF_PRAN_DAMAGE1 e 2) entram antes dos percentuais, logo
+	// depois dos pontos; a defesa da pran (EF_PRAN_RESISTANCE1 e 2) e um somador
+	// fixo e vai em DefFisFlat e DefMagFlat.
+	PranAtkFis, PranAtkMag       int
 	DefFisPercent, DefMagPercent int
 
 	SpeedMove      int
@@ -151,6 +162,8 @@ func Compute(sc Score, b Bonus) Derived {
 	d.DefMag = num.IncWord(0, b.DefMag)
 	d.DefFis = num.IncWord(d.DefFis, b.DefFisPercent*(int(d.DefFis)/100))
 	d.DefMag = num.IncWord(d.DefMag, b.DefMagPercent*(int(d.DefMag)/100))
+	d.DefFis = num.IncWord(d.DefFis, b.DefFisFlat)
+	d.DefMag = num.IncWord(d.DefMag, b.DefMagFlat)
 	if b.Unarmor {
 		d.DefFis = 0
 		d.DefMag = 0
@@ -161,11 +174,17 @@ func Compute(sc Score, b Bonus) Derived {
 	d.AtkFis = num.IncWord(0, b.AtkFis)
 	d.AtkFis = num.IncWord(d.AtkFis, trunc(float64(str)*2.6))
 	d.AtkFis = num.IncWord(d.AtkFis, trunc(float64(agi)*2.6))
+	d.AtkFis = num.IncWord(d.AtkFis, b.PranAtkFis)
 	d.AtkFis = num.IncWord(d.AtkFis, b.AtkFisPercent*(int(d.AtkFis)/100))
+	d.AtkFis = num.IncWord(d.AtkFis, b.RelicAtkFisPercent*(int(d.AtkFis)/100))
+	d.AtkFis = num.IncWord(d.AtkFis, b.AtkFisFlat)
 
 	d.AtkMag = num.IncWord(0, b.AtkMag)
 	d.AtkMag = num.IncWord(d.AtkMag, trunc(float64(inte)*3.2))
+	d.AtkMag = num.IncWord(d.AtkMag, b.PranAtkMag)
 	d.AtkMag = num.IncWord(d.AtkMag, b.AtkMagPercent*(int(d.AtkMag)/100))
+	d.AtkMag = num.IncWord(d.AtkMag, b.RelicAtkMagPercent*(int(d.AtkMag)/100))
+	d.AtkMag = num.IncWord(d.AtkMag, b.AtkMagFlat)
 
 	return d
 }

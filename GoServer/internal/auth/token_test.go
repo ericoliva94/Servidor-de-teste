@@ -45,7 +45,9 @@ func loginPacket(user, token string) []byte {
 func asPacket(t *testing.T, raw []byte) protocol.Packet {
 	t.Helper()
 	f := protocol.NewFramer()
-	if err := f.Feed(raw); err != nil {
+	// Um "hello" verdadeiro na frente evita a colisao do reconhecimento de hello
+	// (bytes 2 e 3 = 11 1F), que nos pacotes pequenos de teste acontece ~1 em 270.
+	if err := f.Feed(append([]byte{0x11, 0xF3, 0, 0}, raw...)); err != nil {
 		t.Fatal(err)
 	}
 	pkt, ok, err := f.Next()

@@ -400,16 +400,16 @@ func TestDesequiparVoltaAoInventario(t *testing.T) {
 	}
 }
 
-// Pran e mascote avisam em vez de equipar algo que nao funciona.
-func TestPranEMascoteSaoRecusadosComAviso(t *testing.T) {
+// O mascote avisa em vez de equipar algo que nao funciona (a pran foi portada e
+// tem testes em pranworld_test.go).
+func TestMascoteERecusadoComAviso(t *testing.T) {
 	h, tab := handlerComItens(t)
-	tab.poeItem(600, gamedata.ItemFromList{ItemType: 10}) // pran
-	tab.poeItem(601, gamedata.ItemFromList{ItemType: 8})  // mascote
+	tab.poeItem(601, gamedata.ItemFromList{ItemType: 8}) // mascote
 	e := novoEspiao(t)
 	s := sessaoComInventario()
 	h.Chan.Join(e.conn, s)
 
-	for i, idx := range []uint16{600, 601} {
+	for i, idx := range []uint16{601} {
 		s.Inventory.Slots[0] = model.Item{Index: idx}
 		if err := h.moveItem(context.Background(), e.conn, s,
 			asPacket(t, moveItemPacket(store.SlotTypeInventory, 0,
