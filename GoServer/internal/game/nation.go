@@ -37,6 +37,7 @@ type NationStore interface {
 
 // LoadNations carrega as tres nacoes do banco. Sem banco ficam vazias.
 func (h *Handler) LoadNations(ctx context.Context) error {
+	h.loadSiege(ctx)
 	if h.Nations == nil || h.NationDB == nil {
 		return nil
 	}

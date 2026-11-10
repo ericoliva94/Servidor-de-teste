@@ -35,8 +35,6 @@ const (
 //   - O progresso do titulo dos OUTROS membros do grupo usava o nivel do
 //     titulo de quem matou (Players[Self].Titles[j].Level); aqui cada um usa o
 //     seu.
-//   - O caso "InClastleVerus" (sem buff 6471 no castelo) nao existe ainda:
-//     o cerco nao esta portado, entao a vitima sempre recebe o buff.
 //   - A copia da origem aplicava a mensagem de honra por membro; mantida.
 func (h *Handler) playerKilled(autor, morto *Session) {
 	if autor == nil || morto == nil || autor == morto {
@@ -48,7 +46,9 @@ func (h *Handler) playerKilled(autor, morto *Session) {
 		h.message(h.connOf(autor), "Alvo está sob Efeito Duradouro. Impossível receber PvP/Honra.")
 		return
 	}
-	h.addBuff(morto, buffAfterDeath)
+	if !morto.Siege.InCastle { // no castelo a vitima nao ganha o buff (InClastleVerus)
+		h.addBuff(morto, buffAfterDeath)
+	}
 
 	if h.hasBuffWithSkillIndex(autor, buffLasting) {
 		h.message(h.connOf(autor), "Você está sob Efeito Duradouro. Impossível receber PvP/Honra.")

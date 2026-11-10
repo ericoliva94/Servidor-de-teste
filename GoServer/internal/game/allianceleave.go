@@ -12,15 +12,14 @@ import (
 const (
 	msgAllyNotLeader = "Apenas o líder da guilda pode fazer isso."
 	msgAllyNone      = "Sua guilda não está em uma aliança."
+	msgAllyInWar     = "Você não pode alterar a aliança estando cadastrado na guerra."
 	msgAllyLeaderOut = "Você não pode sair de uma aliança sendo o líder dela."
 )
 
 // destroyAlliance porta TNPCHandlers.DestroyAlliance: o lider da aliança a
 // desfaz e cada guilda volta a ficar sozinha.
 //
-// Nao portado: a recusa "estando cadastrado na guerra" (Cerco.Atacantes e
-// Defensoras.LordMarechal), porque o cerco de castelo ainda nao existe no Go.
-// Hoje ninguem esta cadastrado, entao a conferencia sempre passaria.
+// Recusa se a guilda esta cadastrada na guerra como lider (atacante ou defesa).
 //
 // Ainda nao alcancavel por pacote: a origem chama isto de uma opcao de dialogo
 // de NPC (NPCHandlers), e os NPCs dependem de arquivos de dados que nao estao
@@ -30,6 +29,10 @@ func (h *Handler) destroyAlliance(ctx context.Context, s *Session) bool {
 	g := h.guildOfSession(s)
 	if g == nil || g.LeaderID != s.CharID() {
 		h.message(c, msgAllyNotLeader)
+		return false
+	}
+	if h.inWarAsLeader(g) {
+		h.message(c, msgAllyInWar)
 		return false
 	}
 	changed, err := h.Guilds.DisbandAlliance(g)
@@ -51,6 +54,10 @@ func (h *Handler) kickAlly(ctx context.Context, s *Session, slot int) bool {
 		h.message(c, msgAllyNotLeader)
 		return false
 	}
+	if h.inWarAsLeader(g) {
+		h.message(c, msgAllyInWar)
+		return false
+	}
 	removed, changed, err := h.Guilds.KickAlly(g, slot)
 	if err != nil {
 		h.message(c, h.allianceErr(err))
@@ -68,6 +75,10 @@ func (h *Handler) exitAlliance(ctx context.Context, s *Session) bool {
 	g := h.guildOfSession(s)
 	if g == nil || g.LeaderID != s.CharID() {
 		h.message(c, msgAllyNotLeader)
+		return false
+	}
+	if h.inWar(g) {
+		h.message(c, msgAllyInWar)
 		return false
 	}
 	changed, err := h.Guilds.LeaveAlliance(g)
@@ -149,4 +160,40 @@ func (h *Handler) finishAllianceChange(ctx context.Context, s *Session, changed 
 			}
 		}
 	}
+}
+
+// inWarAsLeader diz se a guilda lidera uma alianca cadastrada na guerra, como
+// atacante ou como defesa (LordMarechal do cerco).
+func (h *Handler) inWarAsLeader(g *guild.Guild) bool {
+	if h.Siege == nil {
+		return false
+	}
+	c := h.Siege.Cerco()
+	if c.Defenders.Marshal != "" && c.Defenders.Marshal == g.Name {
+		return true
+	}
+	for _, a := range c.Attackers {
+		if a.Marshal != "" && a.Marshal == g.Name {
+			return true
+		}
+	}
+	return false
+}
+
+// inWar diz se a guilda esta no cadastro como atacante (em qualquer cargo) ou
+// como marechal da defesa: quem esta assim nao sai da alianca.
+func (h *Handler) inWar(g *guild.Guild) bool {
+	if h.Siege == nil {
+		return false
+	}
+	c := h.Siege.Cerco()
+	if c.Defenders.Marshal != "" && c.Defenders.Marshal == g.Name {
+		return true
+	}
+	for _, a := range c.Attackers {
+		if a.Has(g.Name) {
+			return true
+		}
+	}
+	return false
 }

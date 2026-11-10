@@ -29,6 +29,7 @@ import (
 	"aika/internal/packets"
 	"aika/internal/protocol"
 	"aika/internal/questdata"
+	"aika/internal/siege"
 	"aika/internal/skillfn"
 	"aika/internal/store"
 	"aika/internal/titledata"
@@ -190,9 +191,14 @@ type Handler struct {
 	TitleTable *titledata.Table
 	// QuestDB guarda as quests do personagem; QuestTable e o Quests.csv e
 	// QuestList o Quest.bin (titulos). Nil deixa o jogador sem quests.
-	QuestDB    QuestStore
-	QuestTable *questdata.Table
-	QuestList  []gamedata.QuestFromList
+	QuestDB QuestStore
+	// Siege e a guerra de castelo do canal; SiegeDB guarda o cadastro. Nil
+	// desliga o cerco. SiegeAnyTime tira a regra de sabado as 20h.
+	Siege        *siege.War
+	SiegeDB      SiegeStore
+	SiegeAnyTime bool
+	QuestTable   *questdata.Table
+	QuestList    []gamedata.QuestFromList
 	// Handoffs e ChannelStatus ligam os canais do processo na troca de canal.
 	// Nil recusa a troca.
 	Handoffs *Handoffs

@@ -101,6 +101,7 @@ Feito nesta rodada, todos com testes (`go test ./...` verde):
 | `TTimeItensThread.CheckItens` | `game/itemexpiry.go` | inventário, equipamento e armazém, a cada 30 s. `SetItemDuration` ligado em `putItem`. **Falta**: itens da pran |
 | `TPranFoodThread.CheckFood` | `game/pranfood.go` | a cada 200 s |
 | Quests: estado, banco, progresso e `0x32F` | `questdata/`, `store/quests.go`, `game/quests.go`, tabela `quests` em `SCHEMA.sql` | `Quests.csv` (33 quests reais), progresso por abate de mob (`MobKilled`), `$331` ao cliente, abandonar (marca 11 conclui). **Falta**: aceitar, entregar e listar quests (diálogos de NPC); `startQuest` existe sem caminho por pacote. A tabela `quests` precisa ser criada no MySQL |
+| Cerco de castelo (item 10) | `siege/`, `game/castle.go`, `store/siege.go`, tabela `nation_siege` | cadastro de atacantes, entrada por ponto, guerra de 60 min, três orbes, selo de 120 s, vitória (a aliança do selo vira marechal/estrategista/juiz/tesoureiro) e saída do castelo; `SiegeTick` a cada 1 s. Desfazer/retirar/sair de aliança recusa quem está cadastrado. Sem buff 6471 no castelo. **Falta**: caminho por pacote do cadastro e da entrada (são opções de NPC); dano de skill de castelo que solta quem segura; `Cerco` não vai no `$91A` da nação; tabela `nation_siege` precisa ser criada no MySQL |
 | `GMRequestServerInformation` (`$3214`) | `game/gmserverinfo.go` | jogadores e relíquias por nação, canais de `Channels` |
 | `GMSendSpawnMob` (`$3219`) | `game/gmspawn.go` | mob temporário (até 50 por espécie, não reaparece). A origem usava id 9148+, que colide com a faixa de dungeon; aqui é o primeiro id livre da faixa de mobs |
 
@@ -115,6 +116,4 @@ Não feito (e por quê):
   substituiu pelo MySQL; portar exigiria definir o que o backup significa no
   banco. O console remoto `0x5000` fica pendente. Precisa de decisões de segurança (backup e
   consulta de conta).
-* **Cerco de castelo** (`UpdateSiegeStatus` 669 linhas e `EnterInCastle`):
-  depende de guilda e nação completas e do estado de cerco, que não existe.
 * **`InitNPCS`** e loja de NPC: continuam bloqueados por dados.

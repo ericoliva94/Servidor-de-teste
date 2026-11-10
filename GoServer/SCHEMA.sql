@@ -161,3 +161,13 @@ CREATE TABLE IF NOT EXISTS quests (
   created_at  BIGINT NOT NULL DEFAULT 0,
   UNIQUE KEY uq_quest (charid, questid)
 );
+
+-- Cadastro do cerco de castelo (TNationCerco). side 0 = defesa, 1 a 4 = os
+-- atacantes; role 0 = marechal, 1 = estrategista, 2 = juiz, 3 = tesoureiro.
+CREATE TABLE IF NOT EXISTS nation_siege (
+  nation_id  TINYINT UNSIGNED NOT NULL,
+  side       TINYINT UNSIGNED NOT NULL,
+  role       TINYINT UNSIGNED NOT NULL,
+  guild_name VARCHAR(32) NOT NULL,
+  PRIMARY KEY (nation_id, side, role)
+);
