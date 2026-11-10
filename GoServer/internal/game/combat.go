@@ -7,7 +7,6 @@ import (
 
 	"aika/internal/combat"
 	"aika/internal/entity"
-	"aika/internal/mobdata"
 	"aika/internal/netsrv"
 	"aika/internal/packets"
 	"aika/internal/protocol"
@@ -286,20 +285,6 @@ func (h *Handler) broadcastMobDamage(s *Session, m *Mob, tipo combat.DamageType,
 			_ = h.Chan.SendTo(id, raw)
 		}
 	}
-}
-
-// onMobDeath da a experiencia e apaga o mob da tela de quem o via.
-//
-// Na origem a experiencia ia para quem deu o ultimo golpe, e o drop para
-// FirstPlayerAttacker. Mantido: a experiencia vai para quem matou.
-func (h *Handler) onMobDeath(c *netsrv.Conn, s *Session, m *Mob, sp *mobdata.Species) {
-	ganho := h.addExp(c, s, int64(sp.Exp), ExpTypeMob)
-	h.awardPranExp(c, s, ganho)
-	h.dropFromMob(c, s, m, sp.DropIndex)
-	h.log().Debug("mob morto",
-		"mob", sp.Name, "id", m.ClientID,
-		"por", s.Avatar.Name, "exp", ganho)
-	h.broadcastMobRemove(m)
 }
 
 // RespawnTick devolve ao mundo os mobs cujo tempo passou e os desenha para

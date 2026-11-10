@@ -21,6 +21,16 @@ const MaxParties = 30
 // CreateParty.
 const (
 	AllocateDefault = 1
+
+	// Divisao de exp (Party.ExpAlocate).
+	ExpEqual      = 1 // igualmente
+	ExpIndividual = 2 // so quem bateu primeiro
+
+	// Divisao de item (Party.ItemAlocate).
+	ItemInOrder    = 1 // em ordem
+	ItemRandom     = 2 // aleatorio (decide o lider)
+	ItemIndividual = 3 // de quem bateu primeiro
+	ItemLeader     = 4 // do lider
 )
 
 // Erros do grupo.
@@ -42,6 +52,8 @@ type Party struct {
 
 	ExpAllocate  uint8
 	ItemAllocate uint8
+	// LastItemSlot e o LastSlotItemReceived: de quem e a vez no modo "em ordem".
+	LastItemSlot uint8
 }
 
 // Has diz se o ClientID esta no grupo.

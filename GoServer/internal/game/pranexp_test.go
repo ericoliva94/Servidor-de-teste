@@ -203,7 +203,7 @@ func TestDigestivo(t *testing.T) {
 func TestAbateDeMobDaExpParaAPran(t *testing.T) {
 	h, s, e, p := pranAtiva(t, func(p *pran.Pran) { p.Level, p.Exp, p.Class = 20, 0, 63 })
 	h.ExpMultiplier = 1
-	h.onMobDeath(e.conn, s, &Mob{ClientID: 100}, &mobdata.Species{Exp: 900})
+	h.onMobDeath(e.conn, s, &Mob{ClientID: 100}, &mobdata.Species{Exp: 900, Level: s.Avatar.Level})
 	if p.Exp != 300 {
 		t.Errorf("exp da pran = %d, queria 300 (um terco de 900)", p.Exp)
 	}
