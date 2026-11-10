@@ -205,3 +205,6 @@ func (h *Handler) giveMobExp(c *netsrv.Conn, s *Session, exp int64) {
 	}
 	h.message(c, fmt.Sprintf("Adquiriu %d exp.", ganho))
 }
+
+// buffAlwaysCrit e o buff 6347 de GetDamageType3: quem o tem so da critico.
+const buffAlwaysCrit = 6347

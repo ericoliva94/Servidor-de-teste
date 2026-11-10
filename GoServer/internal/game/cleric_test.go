@@ -287,6 +287,10 @@ func TestRetornoDeMagiaTiraBuffsDoAlvo(t *testing.T) {
 	h.addBuff(b, 602)
 	h.addBuff(b, 603)
 	h.Parties.Remove(b.ClientID)
+	// Sorteio alto: com 0 o GetDamageType3 erra (sorteio 1 <= 30 + taxa) e o
+	// Retorno de Magia nao tira buff de golpe que errou.
+	h.Rand = randFixo{v: 60}
+	b.Avatar.CurHP = b.Avatar.MaxHP // sem morrer: a morte poe o buff 6471 em quem cai
 	lanca(t, h, a, ae, skRetornoMagica, uint32(b.ClientID), a.Position)
 	if b.Base.Buffs.Count() != 1 {
 		t.Errorf("buffs restantes = %d, queria 1 (Damage=1 tira um)", b.Base.Buffs.Count())
