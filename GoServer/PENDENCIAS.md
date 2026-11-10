@@ -81,3 +81,36 @@ códigos *totalmente* funcionais é menor.
 8. ~~Eventos/diário/cupom/títulos~~ (`0x359`, `0x361`, `0x3E05`): feitos; falta o progresso dos títulos.
 9. **Ferramenta de GM** (27), em pacote próprio.
 10. Cerco de castelo e o restante de `UpdateThreads`.
+
+## 7. Atualização de 2026-11-10 (porte por rotina)
+
+Contagem por rotina (não por código de pacote): das 53 units do `.dproj`,
+cerca de 20 mil linhas de Pascal não tinham o nome da rotina no Go. Parte disso
+era falso pendente (portado com outro nome: correio, `LoadNation`/`SaveNation`).
+
+Feito nesta rodada, todos com testes (`go test ./...` verde):
+
+| Rotina Delphi | Go | Observação |
+|---|---|---|
+| `TBaseMob.MobKilled` | `game/mobkilled.go` | exp por diferença de nível (cinza/azul/amarelo/laranja/roxo), bônus de relíquia (aplicado **uma vez**; a origem somava duas), divisão em grupo (`ExpAlocate`), dono do item (`ItemAlocate`, uma decisão por abate; a origem dava item a todos no modo "em ordem"), mensagem "Adquiriu N exp". **Falta**: raide (mob > 999.999 HP) e contagem de quests |
+| `TBaseMob.PlayerKilled` | `game/playerkilled.go` | relíquias soltas, Efeito Duradouro, buff 6471, PvP/honra/caveira/título 27, grupo perto. **Falta**: `InClastleVerus` |
+| `TBaseMob.GetDamageType3` | `combat/damagetype3.go` | é o sorteio que a origem usa em `SendDamage` e nas skills; o Go usava o `GetDamageType` (roleta), que a origem não chama. Os 5 pontos de rolagem foram trocados. `GetDamageType2` (1 uso, skill 11021) não foi portado |
+| `SearchSkillsPassive` / `SetActiveSkillPassive` | `game/passives.go` | uma tabela só; aprender, resetar e entrar no jogo dão o mesmo total |
+| `SendUnreadMails` (threads) | `game/charsave.go` | reenvio do `$3F1B` a cada gravação periódica |
+| `Destroy/RemoveMember/ExitAlliance` | `guild/ally.go`, `game/allianceleave.go` | **sem caminho por pacote**: a origem chama de opção de NPC. Faltam as recusas de "cadastrado na guerra" (cerco) |
+| `TTimeItensThread.CheckItens` | `game/itemexpiry.go` | inventário, equipamento e armazém, a cada 30 s. `SetItemDuration` ligado em `putItem`. **Falta**: itens da pran |
+| `TPranFoodThread.CheckFood` | `game/pranfood.go` | a cada 200 s |
+
+Não feito (e por quê):
+
+* **Nação/templos** (`CheckStones`, `CheckGuards`, `CheckReliques`): dependem do
+  devir aberto (pedras e guardas), que depende dos NPCs.
+* **Quests** (`SendQuests`, `GetQuest`, `UpdateQuest`, `0x32F`): não há estado de
+  quest por personagem nem tabela no banco do Go.
+* **GM restante** (`GMSendSpawnMob`, `GMRequestPlayerAccount`, backup de conta,
+  informações do servidor, console `0x5000`): `GMSendSpawnMob` precisa de mob
+  temporário no `MobWorld`; o resto precisa de decisões de segurança (backup e
+  consulta de conta).
+* **Cerco de castelo** (`UpdateSiegeStatus` 669 linhas e `EnterInCastle`):
+  depende de guilda e nação completas e do estado de cerco, que não existe.
+* **`InitNPCS`** e loja de NPC: continuam bloqueados por dados.
