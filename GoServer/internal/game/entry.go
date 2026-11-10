@@ -256,6 +256,7 @@ func (h *Handler) sendToWorld(ctx context.Context, c *netsrv.Conn, s *Session, s
 	s.Skills = skills
 	s.Avatar = AvatarFromCharacter(src, uint16(s.Account.Nation))
 	h.loadTitles(ctx, s, src.ID, src.ActiveTitle)
+	h.loadQuests(ctx, s, src.ID)
 	h.refreshPassives(s)
 	// Buffs e efeitos sao do personagem: trocar de personagem na mesma conexao
 	// nao pode carregar os do anterior.

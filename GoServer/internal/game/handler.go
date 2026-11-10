@@ -20,6 +20,7 @@ import (
 	"aika/internal/dropdata"
 	"aika/internal/dungeon"
 	"aika/internal/entity"
+	"aika/internal/gamedata"
 	"aika/internal/guild"
 	"aika/internal/itemfn"
 	"aika/internal/mail"
@@ -27,6 +28,7 @@ import (
 	"aika/internal/netsrv"
 	"aika/internal/packets"
 	"aika/internal/protocol"
+	"aika/internal/questdata"
 	"aika/internal/skillfn"
 	"aika/internal/store"
 	"aika/internal/titledata"
@@ -186,6 +188,11 @@ type Handler struct {
 	// ha itens.
 	EventDB    EventStore
 	TitleTable *titledata.Table
+	// QuestDB guarda as quests do personagem; QuestTable e o Quests.csv e
+	// QuestList o Quest.bin (titulos). Nil deixa o jogador sem quests.
+	QuestDB    QuestStore
+	QuestTable *questdata.Table
+	QuestList  []gamedata.QuestFromList
 	// Handoffs e ChannelStatus ligam os canais do processo na troca de canal.
 	// Nil recusa a troca.
 	Handoffs *Handoffs
@@ -323,6 +330,8 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.giveLeaderParty(ctx, c, s, p)
 	case CodeAddSelfParty:
 		return h.addSelfParty(ctx, c, s, p)
+	case CodeAbandonQuest:
+		return h.abandonQuest(ctx, c, s, p)
 	case CodeLearnSkill:
 		return h.learnSkill(ctx, c, s, p)
 	case CodeUseSkill:
@@ -676,6 +685,7 @@ func (h *Handler) OnDisconnect(c *netsrv.Conn) {
 		h.saveItemBar(s)
 		h.savePrans(s)
 		h.saveTitles(s)
+		h.saveQuests(s)
 		h.pranOnDisconnect(s)
 		h.chestOnDisconnect(s)
 		h.guildOnDisconnect(s)

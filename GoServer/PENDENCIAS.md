@@ -100,6 +100,7 @@ Feito nesta rodada, todos com testes (`go test ./...` verde):
 | `Destroy/RemoveMember/ExitAlliance` | `guild/ally.go`, `game/allianceleave.go` | **sem caminho por pacote**: a origem chama de opção de NPC. Faltam as recusas de "cadastrado na guerra" (cerco) |
 | `TTimeItensThread.CheckItens` | `game/itemexpiry.go` | inventário, equipamento e armazém, a cada 30 s. `SetItemDuration` ligado em `putItem`. **Falta**: itens da pran |
 | `TPranFoodThread.CheckFood` | `game/pranfood.go` | a cada 200 s |
+| Quests: estado, banco, progresso e `0x32F` | `questdata/`, `store/quests.go`, `game/quests.go`, tabela `quests` em `SCHEMA.sql` | `Quests.csv` (33 quests reais), progresso por abate de mob (`MobKilled`), `$331` ao cliente, abandonar (marca 11 conclui). **Falta**: aceitar, entregar e listar quests (diálogos de NPC); `startQuest` existe sem caminho por pacote. A tabela `quests` precisa ser criada no MySQL |
 | `GMRequestServerInformation` (`$3214`) | `game/gmserverinfo.go` | jogadores e relíquias por nação, canais de `Channels` |
 | `GMSendSpawnMob` (`$3219`) | `game/gmspawn.go` | mob temporário (até 50 por espécie, não reaparece). A origem usava id 9148+, que colide com a faixa de dungeon; aqui é o primeiro id livre da faixa de mobs |
 
@@ -107,8 +108,8 @@ Não feito (e por quê):
 
 * **Nação/templos** (`CheckStones`, `CheckGuards`, `CheckReliques`): dependem do
   devir aberto (pedras e guardas), que depende dos NPCs.
-* **Quests** (`SendQuests`, `GetQuest`, `UpdateQuest`, `0x32F`): não há estado de
-  quest por personagem nem tabela no banco do Go.
+* **Quests, parte de NPC** (`SendQuests`, `GetQuest`, entrega com recompensa):
+  o estado e o progresso existem; falta o diálogo de NPC.
 * **GM restante** (`GMRequestPlayerAccount` `$3221`, backup de conta `$3225`/`$3227`):
   leem e gravam os arquivos `.acc` em `DATABASE_PATH\\ACCS\\`, formato que o Go
   substituiu pelo MySQL; portar exigiria definir o que o backup significa no

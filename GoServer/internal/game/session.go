@@ -175,6 +175,9 @@ type Session struct {
 	ActiveTitle  model.TitleData
 	titleApplied []efv
 
+	// Quests e a lista de quests do personagem (PlayerQuests, ate 50).
+	Quests []model.QuestProgress
+
 	// passiveApplied e o que refreshPassives somou ao Ability, para desfazer
 	// exatamente isso.
 	passiveApplied []efv

@@ -97,6 +97,7 @@ func (h *Handler) SaveAllTick() int {
 		h.saveItemBar(s)
 		h.savePrans(s)
 		h.saveTitles(s)
+		h.saveQuests(s)
 		tradeMu.Unlock()
 		h.pushUnreadMail(s)
 		n++

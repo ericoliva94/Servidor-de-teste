@@ -34,6 +34,7 @@ import (
 	"aika/internal/mobdata"
 	"aika/internal/model"
 	"aika/internal/netsrv"
+	"aika/internal/questdata"
 	"aika/internal/serverlist"
 	"aika/internal/skillfn"
 	"aika/internal/store"
@@ -84,6 +85,14 @@ func run() error {
 	for _, t := range tables.Loaded {
 		log.Info("tabela carregada", "detalhe", t.String())
 	}
+	questTable, questAvisos, err := questdata.Load(*dataDir)
+	if err != nil {
+		log.Warn("quests indisponiveis", "erro", err)
+	}
+	for _, a := range questAvisos {
+		log.Warn("quests: linha ignorada", "detalhe", a)
+	}
+	log.Info("quests carregadas", "quantas", questTable.Len())
 	titleTable, err := titledata.Load(*dataDir)
 	if err != nil {
 		log.Warn("titulos indisponiveis", "erro", err)
@@ -113,6 +122,7 @@ func run() error {
 		couponDB      game.CouponStore
 		pranDB        game.PranStore
 		titleDB       game.TitleStore
+		questDB       game.QuestStore
 		eventDB       game.EventStore
 		gmDB          game.GMStore
 		gmCmds        game.GMCommandStore
@@ -181,6 +191,7 @@ func run() error {
 		couponDB = store.Coupons{DB: db}
 		pranDB = store.Prans{DB: db}
 		titleDB = store.Titles{DB: db}
+		questDB = store.Quests{DB: db}
 		eventDB = store.Events{DB: db}
 		gmDB = store.GMAccounts{DB: db}
 		gmCmds = store.GMAccounts{DB: db}
@@ -332,6 +343,9 @@ func run() error {
 			PranDB:         pranDB,
 			PranIDs:        pranpkg.NewIDs(),
 			TitleDB:        titleDB,
+			QuestDB:        questDB,
+			QuestTable:     questTable,
+			QuestList:      tables.Quests,
 			EventDB:        eventDB,
 			GMDB:           gmDB,
 			GMCmds:         gmCmds,

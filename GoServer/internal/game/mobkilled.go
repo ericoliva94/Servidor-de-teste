@@ -110,6 +110,7 @@ func (h *Handler) mobKilledFor(c *netsrv.Conn, s *Session, m *Mob, sp *mobdata.S
 	if g == nil {
 		h.giveMobExp(c, s, exp)
 		h.dropFromMob(c, s, m, sp.DropIndex)
+		h.questOnKill(c, s, sp.IntName)
 		return true
 	}
 
@@ -141,6 +142,7 @@ func (h *Handler) mobKilledFor(c *netsrv.Conn, s *Session, m *Mob, sp *mobdata.S
 	if dono == s.ClientID {
 		h.dropFromMob(c, s, m, sp.DropIndex)
 	}
+	h.questOnKill(c, s, sp.IntName)
 	return gotExp
 }
 
