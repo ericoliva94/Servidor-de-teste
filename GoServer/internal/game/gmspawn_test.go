@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"aika/internal/devir"
 	"aika/internal/mobdata"
 	"aika/internal/model"
 	"aika/internal/netsrv"
@@ -101,4 +102,20 @@ func TestTempMobCapAndNoRespawn(t *testing.T) {
 		t.Error("o mob temporario morto deveria sair do mundo")
 	}
 	_ = mobdata.FirstMobClientID
+}
+
+func TestGMServerInfoCountsPlayersPerNation(t *testing.T) {
+	h, s, e := gmComMobs(t, PrivModerator)
+	h.Devir = devir.New(2)
+	if err := h.gmServerInfo(context.Background(), e.conn, s, asPacket(t, miscPacket(CodeGMServerInfo, packets.SignalData{}))); err != nil {
+		t.Fatal(err)
+	}
+	out := decodifica[packets.SendServerInfos](t, proximoDe(t, e, CodeGMServerInfoReply))
+	if out.Server02Online != 1 || out.Server01Online != 0 || out.Server02Reliq != 0 {
+		t.Errorf("resposta = %+v", out)
+	}
+	s.gm.priv = 1
+	e.drena(10 * time.Millisecond)
+	h.gmServerInfo(context.Background(), e.conn, s, asPacket(t, miscPacket(CodeGMServerInfo, packets.SignalData{})))
+	e.nada(t, 30*time.Millisecond)
 }

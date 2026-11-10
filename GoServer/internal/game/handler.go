@@ -461,6 +461,8 @@ func (h *Handler) HandlePacket(ctx context.Context, c *netsrv.Conn, p protocol.P
 		return h.gmFounderValidate(ctx, c, s, p)
 	case CodeGMResetPrans:
 		return h.gmResetPrans(ctx, c, s, p)
+	case CodeGMServerInfo:
+		return h.gmServerInfo(ctx, c, s, p)
 	case CodeGMSpawnMob:
 		return h.gmSpawnMob(ctx, c, s, p)
 	case CodeGMEventItem:
