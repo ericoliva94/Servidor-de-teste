@@ -174,6 +174,10 @@ type Session struct {
 	Titles       [store.MaxTitles]model.TitleData
 	ActiveTitle  model.TitleData
 	titleApplied []efv
+
+	// passiveApplied e o que refreshPassives somou ao Ability, para desfazer
+	// exatamente isso.
+	passiveApplied []efv
 	// handoffAccount e a conta cuja troca de canal esta em andamento; zero se
 	// nenhuma.
 	handoffAccount uint32

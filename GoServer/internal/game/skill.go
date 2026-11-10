@@ -93,6 +93,8 @@ func (h *Handler) learnSkill(ctx context.Context, c *netsrv.Conn, s *Session, p 
 	s.Avatar.SkillPoint = subPoints(s.Avatar.SkillPoint, int(d.SkillPoints))
 	s.Avatar.Gold = subGold(s.Avatar.Gold, int64(d.LearnCosts))
 
+	h.refreshPassives(s)
+	h.recalcAfterPran(s)
 	h.sendSkillList(c, s)
 	h.sendRefreshPoint(c, s)
 	h.log().Info("skill aprendida",
@@ -141,6 +143,8 @@ func (h *Handler) resetSkills(ctx context.Context, c *netsrv.Conn, s *Session, p
 	}
 	s.Avatar.SkillPoint = addPoints(s.Avatar.SkillPoint, devolvidos)
 	s.Base.Cooldowns.Clear()
+	h.refreshPassives(s)
+	h.recalcAfterPran(s)
 
 	h.sendSkillList(c, s)
 	h.sendRefreshPoint(c, s)
