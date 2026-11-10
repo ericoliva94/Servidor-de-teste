@@ -509,6 +509,7 @@ func run() error {
 		go saveLoop(ctx, h, log)
 		go buffLoop(ctx, h)
 		go expiryLoop(ctx, h)
+		go pranFoodLoop(ctx, h)
 	}
 	// A fila de leilao e do banco, nao do canal: uma vez so.
 	go auctionLoop(ctx, canalHandler, log)
@@ -831,6 +832,23 @@ func saveLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
 			if n := h.SaveAllTick(); n > 0 {
 				log.Debug("gravacao periodica", "jogadores", n)
 			}
+		}
+	}
+}
+
+// pranFoodInterval e o passo da fome da pran (TPranFoodThread: 200 s).
+const pranFoodInterval = 200 * time.Second
+
+// pranFoodLoop gasta a comida da pran invocada.
+func pranFoodLoop(ctx context.Context, h *game.Handler) {
+	t := time.NewTicker(pranFoodInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			h.PranFoodTick()
 		}
 	}
 }
