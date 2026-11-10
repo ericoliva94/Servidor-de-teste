@@ -480,6 +480,7 @@ func (h *Handler) onDeath(autor, morto *Session) {
 	h.log().Info("jogador morto",
 		"morto", morto.Avatar.Name, "por", autor.Avatar.Name,
 		"canal", h.Channel)
+	h.playerKilled(autor, morto)
 }
 
 // wearWeapon desgasta a arma a cada 48 golpes. Porte do bloco
