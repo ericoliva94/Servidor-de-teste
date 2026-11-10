@@ -17,8 +17,9 @@ import (
 // origem gravava mesmo assim em Inventory[255] quando GetEmptySlot nao
 // achava slot (o caminho "255" do PutItem nao conferia o resultado).
 //
-// Nao portado: SetItemDuration e IsSealed para itens com Expires/CanSealed
-// (a duracao de item ainda nao esta portada; ver PORTE.md) e o tratamento
+// SetItemDuration vale para o item que chega sem data (Refi e Time zerados).
+//
+// Nao portado: o IsSealed para itens com CanSealed e o tratamento
 // especial do item 5300 e do tesouro sagrado (ItemType 40).
 func (h *Handler) putItem(c *netsrv.Conn, s *Session, it model.Item) bool {
 	t := h.data()
@@ -34,6 +35,11 @@ func (h *Handler) putItem(c *netsrv.Conn, s *Session, it model.Item) bool {
 	}
 
 	if !itemfn.CanAgroup(t, it.Index) {
+		// Item novo com prazo na tabela ganha a data de fim (SetItemDuration).
+		// So o que chega sem data: um item que ja tem data nao a perde.
+		if it.IsSealed() {
+			h.setItemDuration(&it)
+		}
 		slot, ok := h.freeInventorySlot(s)
 		if !ok {
 			return false

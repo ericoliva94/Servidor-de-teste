@@ -508,6 +508,7 @@ func run() error {
 		go chestLoop(ctx, h)
 		go saveLoop(ctx, h, log)
 		go buffLoop(ctx, h)
+		go expiryLoop(ctx, h)
 	}
 	// A fila de leilao e do banco, nao do canal: uma vez so.
 	go auctionLoop(ctx, canalHandler, log)
@@ -830,6 +831,24 @@ func saveLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
 			if n := h.SaveAllTick(); n > 0 {
 				log.Debug("gravacao periodica", "jogadores", n)
 			}
+		}
+	}
+}
+
+// expiryInterval e o passo da conferencia de itens com prazo. A origem usava
+// uma thread propria (TTimeItensThread).
+const expiryInterval = 30 * time.Second
+
+// expiryLoop apaga ou marca os itens que venceram.
+func expiryLoop(ctx context.Context, h *game.Handler) {
+	t := time.NewTicker(expiryInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			h.ExpireItemsTick()
 		}
 	}
 }
