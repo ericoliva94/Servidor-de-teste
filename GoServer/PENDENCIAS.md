@@ -100,6 +100,7 @@ Feito nesta rodada, todos com testes (`go test ./...` verde):
 | `Destroy/RemoveMember/ExitAlliance` | `guild/ally.go`, `game/allianceleave.go` | **sem caminho por pacote**: a origem chama de opção de NPC. Faltam as recusas de "cadastrado na guerra" (cerco) |
 | `TTimeItensThread.CheckItens` | `game/itemexpiry.go` | inventário, equipamento e armazém, a cada 30 s. `SetItemDuration` ligado em `putItem`. **Falta**: itens da pran |
 | `TPranFoodThread.CheckFood` | `game/pranfood.go` | a cada 200 s |
+| `GMRequestServerInformation` (`$3214`) | `game/gmserverinfo.go` | jogadores e relíquias por nação, canais de `Channels` |
 | `GMSendSpawnMob` (`$3219`) | `game/gmspawn.go` | mob temporário (até 50 por espécie, não reaparece). A origem usava id 9148+, que colide com a faixa de dungeon; aqui é o primeiro id livre da faixa de mobs |
 
 Não feito (e por quê):
@@ -108,8 +109,10 @@ Não feito (e por quê):
   devir aberto (pedras e guardas), que depende dos NPCs.
 * **Quests** (`SendQuests`, `GetQuest`, `UpdateQuest`, `0x32F`): não há estado de
   quest por personagem nem tabela no banco do Go.
-* **GM restante** (`GMRequestPlayerAccount`, backup de conta,
-  informações do servidor, console `0x5000`): precisa de decisões de segurança (backup e
+* **GM restante** (`GMRequestPlayerAccount` `$3221`, backup de conta `$3225`/`$3227`):
+  leem e gravam os arquivos `.acc` em `DATABASE_PATH\\ACCS\\`, formato que o Go
+  substituiu pelo MySQL; portar exigiria definir o que o backup significa no
+  banco. O console remoto `0x5000` fica pendente. Precisa de decisões de segurança (backup e
   consulta de conta).
 * **Cerco de castelo** (`UpdateSiegeStatus` 669 linhas e `EnterInCastle`):
   depende de guilda e nação completas e do estado de cerco, que não existe.
