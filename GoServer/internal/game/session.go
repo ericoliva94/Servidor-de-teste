@@ -174,6 +174,16 @@ type Session struct {
 	Titles       [store.MaxTitles]model.TitleData
 	ActiveTitle  model.TitleData
 	titleApplied []efv
+
+	// Siege e o estado do jogador no cerco de castelo.
+	Siege SiegeState
+
+	// Quests e a lista de quests do personagem (PlayerQuests, ate 50).
+	Quests []model.QuestProgress
+
+	// passiveApplied e o que refreshPassives somou ao Ability, para desfazer
+	// exatamente isso.
+	passiveApplied []efv
 	// handoffAccount e a conta cuja troca de canal esta em andamento; zero se
 	// nenhuma.
 	handoffAccount uint32

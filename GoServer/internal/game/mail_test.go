@@ -765,3 +765,26 @@ func TestCorreioExigeEstarEmJogo(t *testing.T) {
 		}
 	}
 }
+
+// A gravacao periodica reenvia o numero de cartas nao lidas.
+func TestSaveTickReenviaNaoLidas(t *testing.T) {
+	h, f := handlerComCorreio(t)
+	a, ea := entraComPersonagem(t, h, "Alfa", 100)
+	caixa, _ := f.Box(context.Background(), 100)
+	caixa.Add(mail.Mail{Index: 7, Nick: "Beta", Title: "a"})
+	caixa.Add(mail.Mail{Index: 8, Nick: "Beta", Title: "b", Checked: true})
+	ea.drena(100 * time.Millisecond)
+
+	h.pushUnreadMail(a)
+	vis := ea.proximo(t)
+	if vis.code != CodeMailUnread {
+		t.Fatalf("codigo %#x, queria %#x", vis.code, CodeMailUnread)
+	}
+	var pkt packets.SignalData
+	if err := netsrv.Unmarshal(asPacote(t, vis.corpo), &pkt); err != nil {
+		t.Fatal(err)
+	}
+	if pkt.Data != 1 {
+		t.Errorf("nao lidas = %d, queria 1", pkt.Data)
+	}
+}

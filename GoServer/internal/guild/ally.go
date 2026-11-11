@@ -11,6 +11,9 @@ const AllyNameLen = 18
 // Erros da aliança.
 var (
 	ErrNotAllyLeader = errors.New("guild: a guilda nao lidera a alianca")
+	ErrNotAllied     = errors.New("guild: a guilda nao esta em uma alianca")
+	ErrIsAllyLeader  = errors.New("guild: a lider da alianca nao pode sair dela")
+	ErrAllySlot      = errors.New("guild: slot de aliada invalido ou vazio")
 	ErrAlreadyAllied = errors.New("guild: a guilda ja esta em uma alianca")
 	ErrAllyFull      = errors.New("guild: alianca sem espaco")
 	ErrAllyNation    = errors.New("guild: guildas de nacoes diferentes")
@@ -153,4 +156,103 @@ func (r *Registry) leaveAllianceLocked(g *Guild) {
 		}
 	}
 	g.resetAlly()
+}
+
+// DisbandAlliance desfaz a aliança de lead: cada guilda volta a ficar sozinha.
+// Porte de TNPCHandlers.DestroyAlliance. Devolve as guildas que mudaram (lead
+// e as que eram aliadas) para o chamador avisar e gravar.
+//
+// A origem nao conferia que quem chamava era a lider (o NPC so oferecia a
+// opcao a ela); aqui a regra esta na funcao.
+func (r *Registry) DisbandAlliance(lead *Guild) ([]*Guild, error) {
+	if r == nil || lead == nil {
+		return nil, ErrNoGuild
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lead.EnsureAlly()
+	if !lead.InAlliance() {
+		return nil, ErrNotAllied
+	}
+	if lead.Ally.Leader != lead.Index {
+		return nil, ErrNotAllyLeader
+	}
+	changed := []*Guild{lead}
+	for _, it := range lead.Ally.Guilds[1:] {
+		if o := r.byIndex[it.Index]; it.Index != 0 && o != nil {
+			o.resetAlly()
+			changed = append(changed, o)
+		}
+	}
+	lead.resetAlly()
+	return changed, nil
+}
+
+// KickAlly tira a aliada do slot (1 a 3) da aliança de lead. Porte de
+// TNPCHandlers.RemoveMemberAlliance: a retirada volta a ficar sozinha e a
+// lista nova, sem ela, vai para as que sobram. Devolve a guilda retirada e as
+// que mudaram (lead, retirada e restantes).
+func (r *Registry) KickAlly(lead *Guild, slot int) (removed *Guild, changed []*Guild, err error) {
+	if r == nil || lead == nil {
+		return nil, nil, ErrNoGuild
+	}
+	if slot < 1 || slot >= AllySlots {
+		return nil, nil, ErrAllySlot
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lead.EnsureAlly()
+	if lead.Ally.Leader != lead.Index {
+		return nil, nil, ErrNotAllyLeader
+	}
+	idx := lead.Ally.Guilds[slot].Index
+	removed = r.byIndex[idx]
+	if idx == 0 || removed == nil {
+		return nil, nil, ErrAllySlot
+	}
+	lead.Ally.Guilds[slot] = AllyItem{}
+	removed.resetAlly()
+	changed = []*Guild{lead, removed}
+	for _, it := range lead.Ally.Guilds[1:] {
+		if o := r.byIndex[it.Index]; it.Index != 0 && o != nil {
+			o.Ally = lead.Ally
+			changed = append(changed, o)
+		}
+	}
+	return removed, changed, nil
+}
+
+// LeaveAlliance e a saida de uma aliada da aliança. Porte de
+// TNPCHandlers.ExitAlliance: a guilda volta a ficar sozinha e o slot dela some
+// da lista da lider e das outras aliadas. A lider nao pode sair (ela desfaz).
+// Devolve as guildas que mudaram (a que saiu e todas as que ficaram).
+func (r *Registry) LeaveAlliance(g *Guild) ([]*Guild, error) {
+	if r == nil || g == nil {
+		return nil, ErrNoGuild
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	g.EnsureAlly()
+	if !g.InAlliance() {
+		return nil, ErrNotAllied
+	}
+	if g.Ally.Leader == g.Index {
+		return nil, ErrIsAllyLeader
+	}
+	changed := []*Guild{g}
+	for _, it := range g.Ally.Guilds {
+		if it.Index == 0 || it.Index == g.Index {
+			continue
+		}
+		if o := r.byIndex[it.Index]; o != nil {
+			for i := range o.Ally.Guilds {
+				if o.Ally.Guilds[i].Index == g.Index {
+					o.Ally.Guilds[i] = AllyItem{}
+				}
+			}
+			changed = append(changed, o)
+		}
+	}
+	g.resetAlly()
+	return changed, nil
 }

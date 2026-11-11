@@ -81,3 +81,39 @@ códigos *totalmente* funcionais é menor.
 8. ~~Eventos/diário/cupom/títulos~~ (`0x359`, `0x361`, `0x3E05`): feitos; falta o progresso dos títulos.
 9. **Ferramenta de GM** (27), em pacote próprio.
 10. Cerco de castelo e o restante de `UpdateThreads`.
+
+## 7. Atualização de 2026-11-10 (porte por rotina)
+
+Contagem por rotina (não por código de pacote): das 53 units do `.dproj`,
+cerca de 20 mil linhas de Pascal não tinham o nome da rotina no Go. Parte disso
+era falso pendente (portado com outro nome: correio, `LoadNation`/`SaveNation`).
+
+Feito nesta rodada, todos com testes (`go test ./...` verde):
+
+| Rotina Delphi | Go | Observação |
+|---|---|---|
+| `TBaseMob.MobKilled` | `game/mobkilled.go` | exp por diferença de nível (cinza/azul/amarelo/laranja/roxo), bônus de relíquia (aplicado **uma vez**; a origem somava duas), divisão em grupo (`ExpAlocate`), dono do item (`ItemAlocate`, uma decisão por abate; a origem dava item a todos no modo "em ordem"), mensagem "Adquiriu N exp". **Falta**: raide (mob > 999.999 HP) e contagem de quests |
+| `TBaseMob.PlayerKilled` | `game/playerkilled.go` | relíquias soltas, Efeito Duradouro, buff 6471, PvP/honra/caveira/título 27, grupo perto. **Falta**: `InClastleVerus` |
+| `TBaseMob.GetDamageType3` | `combat/damagetype3.go` | é o sorteio que a origem usa em `SendDamage` e nas skills; o Go usava o `GetDamageType` (roleta), que a origem não chama. Os 5 pontos de rolagem foram trocados. `GetDamageType2` (1 uso, skill 11021) não foi portado |
+| `SearchSkillsPassive` / `SetActiveSkillPassive` | `game/passives.go` | uma tabela só; aprender, resetar e entrar no jogo dão o mesmo total |
+| `SendUnreadMails` (threads) | `game/charsave.go` | reenvio do `$3F1B` a cada gravação periódica |
+| `Destroy/RemoveMember/ExitAlliance` | `guild/ally.go`, `game/allianceleave.go` | **sem caminho por pacote**: a origem chama de opção de NPC. Faltam as recusas de "cadastrado na guerra" (cerco) |
+| `TTimeItensThread.CheckItens` | `game/itemexpiry.go` | inventário, equipamento e armazém, a cada 30 s. `SetItemDuration` ligado em `putItem`. **Falta**: itens da pran |
+| `TPranFoodThread.CheckFood` | `game/pranfood.go` | a cada 200 s |
+| Quests: estado, banco, progresso e `0x32F` | `questdata/`, `store/quests.go`, `game/quests.go`, tabela `quests` em `SCHEMA.sql` | `Quests.csv` (33 quests reais), progresso por abate de mob (`MobKilled`), `$331` ao cliente, abandonar (marca 11 conclui). **Falta**: aceitar, entregar e listar quests (diálogos de NPC); `startQuest` existe sem caminho por pacote. A tabela `quests` precisa ser criada no MySQL |
+| Cerco de castelo (item 10) | `siege/`, `game/castle.go`, `store/siege.go`, tabela `nation_siege` | cadastro de atacantes, entrada por ponto, guerra de 60 min, três orbes, selo de 120 s, vitória (a aliança do selo vira marechal/estrategista/juiz/tesoureiro) e saída do castelo; `SiegeTick` a cada 1 s. Desfazer/retirar/sair de aliança recusa quem está cadastrado. Sem buff 6471 no castelo. **Falta**: caminho por pacote do cadastro e da entrada (são opções de NPC); dano de skill de castelo que solta quem segura; `Cerco` não vai no `$91A` da nação; tabela `nation_siege` precisa ser criada no MySQL |
+| `GMRequestServerInformation` (`$3214`) | `game/gmserverinfo.go` | jogadores e relíquias por nação, canais de `Channels` |
+| `GMSendSpawnMob` (`$3219`) | `game/gmspawn.go` | mob temporário (até 50 por espécie, não reaparece). A origem usava id 9148+, que colide com a faixa de dungeon; aqui é o primeiro id livre da faixa de mobs |
+
+Não feito (e por quê):
+
+* **Nação/templos** (`CheckStones`, `CheckGuards`, `CheckReliques`): dependem do
+  devir aberto (pedras e guardas), que depende dos NPCs.
+* **Quests, parte de NPC** (`SendQuests`, `GetQuest`, entrega com recompensa):
+  o estado e o progresso existem; falta o diálogo de NPC.
+* **GM restante** (`GMRequestPlayerAccount` `$3221`, backup de conta `$3225`/`$3227`):
+  leem e gravam os arquivos `.acc` em `DATABASE_PATH\\ACCS\\`, formato que o Go
+  substituiu pelo MySQL; portar exigiria definir o que o backup significa no
+  banco. O console remoto `0x5000` fica pendente. Precisa de decisões de segurança (backup e
+  consulta de conta).
+* **`InitNPCS`** e loja de NPC: continuam bloqueados por dados.

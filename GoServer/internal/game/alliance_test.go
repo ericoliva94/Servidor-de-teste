@@ -258,3 +258,80 @@ func TestAliancaForaDoMarechalNaoMexeNaGrade(t *testing.T) {
 		t.Error("so a aliança do marechal preenche a grade")
 	}
 }
+
+// ---- desfazer, retirar e sair
+
+func (c *cenarioNacao) aliancaDeTres(t *testing.T) (*guildaDeTeste, *guildaDeTeste) {
+	t.Helper()
+	beta := c.alianca(t)
+	gama := c.novaGuilda(t, "Gama", 1, 31)
+	c.pedeAlianca(t, c.lider, c.eLider, "Beta")
+	c.respondeAlianca(t, beta.s, beta.e, true)
+	c.pedeAlianca(t, c.lider, c.eLider, "Gama")
+	c.respondeAlianca(t, gama.s, gama.e, true)
+	for _, e := range []*espiao{c.eLider, beta.e, gama.e} {
+		e.drena(5 * time.Millisecond)
+	}
+	return beta, gama
+}
+
+func TestDesfazerAliancaSoPeloLider(t *testing.T) {
+	c := novoCenarioNacao(t)
+	beta, gama := c.aliancaDeTres(t)
+	ctx := context.Background()
+	if c.h.destroyAlliance(ctx, c.membro) {
+		t.Error("membro comum nao desfaz")
+	}
+	if c.h.destroyAlliance(ctx, beta.s) {
+		t.Error("lider de uma aliada nao desfaz a aliança dos outros")
+	}
+	beta.e.drena(5 * time.Millisecond)
+	if !c.h.destroyAlliance(ctx, c.lider) {
+		t.Fatal("a lider deveria conseguir")
+	}
+	for _, g := range []*guild.Guild{c.alfa, beta.g, gama.g} {
+		if g.InAlliance() {
+			t.Errorf("%s deveria estar sozinha", g.Name)
+		}
+	}
+	if got := mensagemDe(t, beta.e); got != "Sua aliança teve mudanças." {
+		t.Errorf("aviso da Beta = %q", got)
+	}
+}
+
+func TestRetirarAliadaTiraOCargoDeNacao(t *testing.T) {
+	c := novoCenarioNacao(t)
+	beta, gama := c.aliancaDeTres(t)
+	c.h.Nations.Update(1, func(n *nation.State) { n.JudgeGuild = beta.g.Index })
+
+	if !c.h.kickAlly(context.Background(), c.lider, 1) {
+		t.Fatal("a lider deveria conseguir retirar")
+	}
+	if beta.g.InAlliance() || c.alfa.AllyCount() != 2 || gama.g.Ally != c.alfa.Ally {
+		t.Errorf("estado da aliança: alfa=%+v gama=%+v", c.alfa.Ally, gama.g.Ally)
+	}
+	if st, _ := c.h.Nations.Get(1); st.JudgeGuild != 0 {
+		t.Error("a Beta retirada deveria perder o cargo de juiz")
+	}
+	if c.h.kickAlly(context.Background(), c.lider, 1) {
+		t.Error("slot ja vazio")
+	}
+}
+
+func TestSairDaAliancaERecusaALider(t *testing.T) {
+	c := novoCenarioNacao(t)
+	beta, _ := c.aliancaDeTres(t)
+	ctx := context.Background()
+	if c.h.exitAlliance(ctx, c.lider) {
+		t.Error("a lider nao sai: ela desfaz")
+	}
+	if got := mensagemDe(t, c.eLider); got != msgAllyLeaderOut {
+		t.Errorf("mensagem = %q", got)
+	}
+	if !c.h.exitAlliance(ctx, beta.s) {
+		t.Fatal("a aliada deveria conseguir sair")
+	}
+	if beta.g.InAlliance() || c.alfa.AllyCount() != 2 {
+		t.Errorf("Beta=%v alfa=%d", beta.g.InAlliance(), c.alfa.AllyCount())
+	}
+}

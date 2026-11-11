@@ -458,6 +458,7 @@ func TestGolpeEmMobInexistente(t *testing.T) {
 func TestMatarMobDaExperiencia(t *testing.T) {
 	sp := especie("Bicho", 1, 1, 1000, 1000)
 	sp.Exp = 777
+	sp.Level = 50 // mesma faixa do jogador: sem reducao por diferenca de nivel
 	h, _ := handlerComMobs(t, tabelaDeMobs(sp))
 	e := novoEspiao(t)
 	s := lutador("Alfa", 1000, 1000)
@@ -486,6 +487,7 @@ func TestMatarMobDaExperiencia(t *testing.T) {
 func TestMultiplicadorDeExperiencia(t *testing.T) {
 	sp := especie("Bicho", 1, 1, 1000, 1000)
 	sp.Exp = 100
+	sp.Level = 50
 	h, _ := handlerComMobs(t, tabelaDeMobs(sp))
 	h.ExpMultiplier = 3
 	e := novoEspiao(t)

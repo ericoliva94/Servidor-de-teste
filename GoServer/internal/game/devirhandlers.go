@@ -277,6 +277,9 @@ func (h *Handler) giveHonor(c *netsrv.Conn, s *Session, honra uint32) {
 	} else {
 		s.Avatar.Honor = uint32(sum)
 	}
+	if c == nil {
+		return
+	}
 	h.message(c, fmt.Sprintf("Adquiriu %d pontos de honra.", honra))
 	_ = c.SendStruct(CodeRefreshKills, packets.UpdateHonorAndKills{
 		Header: packets.PacketHeader{Index: s.ClientID}, Honor: s.Avatar.Honor, Kills: s.Avatar.KillPoint})

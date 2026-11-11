@@ -7,7 +7,6 @@ import (
 
 	"aika/internal/combat"
 	"aika/internal/entity"
-	"aika/internal/mobdata"
 	"aika/internal/netsrv"
 	"aika/internal/packets"
 	"aika/internal/protocol"
@@ -135,18 +134,20 @@ func (h *Handler) hitMob(c *netsrv.Conn, s *Session, mobID uint16) error {
 	}
 
 	rnd := h.rand()
-	tipo := s.Roller.Roll(
+	tipo := s.Roller.Roll3(
 		combat.Attacker{
-			Critical: s.Avatar.Critical,
-			DuploAtk: s.Avatar.DuploAtk,
-			Acerto:   uint16(s.Avatar.Acerto),
+			Critical:  s.Avatar.Critical,
+			DuploAtk:  s.Avatar.DuploAtk,
+			Acerto:    uint16(s.Avatar.Acerto),
+			ForceCrit: s.Base.Buffs != nil && s.Base.Buffs.Has(buffAlwaysCrit),
 		},
 		combat.Defender{
 			CritRes:  h.MobCritRes,
 			DuploRes: h.MobDuploRes,
 			Esquiva:  h.MobEsquiva,
+			IsPlayer: false,
 		},
-		true, 0, rnd)
+		0, rnd)
 
 	dano := 0
 	if tipo != combat.Miss {
@@ -288,20 +289,6 @@ func (h *Handler) broadcastMobDamage(s *Session, m *Mob, tipo combat.DamageType,
 	}
 }
 
-// onMobDeath da a experiencia e apaga o mob da tela de quem o via.
-//
-// Na origem a experiencia ia para quem deu o ultimo golpe, e o drop para
-// FirstPlayerAttacker. Mantido: a experiencia vai para quem matou.
-func (h *Handler) onMobDeath(c *netsrv.Conn, s *Session, m *Mob, sp *mobdata.Species) {
-	ganho := h.addExp(c, s, int64(sp.Exp), ExpTypeMob)
-	h.awardPranExp(c, s, ganho)
-	h.dropFromMob(c, s, m, sp.DropIndex)
-	h.log().Debug("mob morto",
-		"mob", sp.Name, "id", m.ClientID,
-		"por", s.Avatar.Name, "exp", ganho)
-	h.broadcastMobRemove(m)
-}
-
 // RespawnTick devolve ao mundo os mobs cujo tempo passou e os desenha para
 // quem esta perto.
 //
@@ -360,18 +347,20 @@ func (h *Handler) resolveAttackTarget(s *Session, index uint16) (*Session, error
 func (h *Handler) resolveHit(c *netsrv.Conn, s *Session, alvo *Session) {
 	rnd := h.rand()
 
-	tipo := s.Roller.Roll(
+	tipo := s.Roller.Roll3(
 		combat.Attacker{
-			Critical: s.Avatar.Critical,
-			DuploAtk: s.Avatar.DuploAtk,
-			Acerto:   uint16(s.Avatar.Acerto),
+			Critical:  s.Avatar.Critical,
+			DuploAtk:  s.Avatar.DuploAtk,
+			Acerto:    uint16(s.Avatar.Acerto),
+			ForceCrit: s.Base.Buffs != nil && s.Base.Buffs.Has(buffAlwaysCrit),
 		},
 		combat.Defender{
 			CritRes:  alvo.Avatar.CritRes,
 			DuploRes: alvo.Avatar.DuploRes,
 			Esquiva:  uint16(alvo.Avatar.Esquiva),
+			IsPlayer: true,
 		},
-		true, 0, rnd)
+		0, rnd)
 
 	dano := 0
 	if tipo != combat.Miss {
@@ -495,6 +484,7 @@ func (h *Handler) onDeath(autor, morto *Session) {
 	h.log().Info("jogador morto",
 		"morto", morto.Avatar.Name, "por", autor.Avatar.Name,
 		"canal", h.Channel)
+	h.playerKilled(autor, morto)
 }
 
 // wearWeapon desgasta a arma a cada 48 golpes. Porte do bloco

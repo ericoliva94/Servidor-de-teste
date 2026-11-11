@@ -34,7 +34,9 @@ import (
 	"aika/internal/mobdata"
 	"aika/internal/model"
 	"aika/internal/netsrv"
+	"aika/internal/questdata"
 	"aika/internal/serverlist"
+	"aika/internal/siege"
 	"aika/internal/skillfn"
 	"aika/internal/store"
 	"aika/internal/titledata"
@@ -50,16 +52,17 @@ func main() {
 
 func run() error {
 	var (
-		iniPath       = flag.String("ini", "AikaServer.ini", "caminho do AikaServer.ini")
-		dataDir       = flag.String("data", dataDirDefault(), "pasta com as tabelas .bin")
-		logLevel      = flag.String("log", "info", "nivel de log: debug, info, warn, error")
-		skipDB        = flag.Bool("no-db", false, "sobe sem banco (so para conferir a carga)")
-		nation        = flag.Int("nation", 1, "nacao deste servidor (define os 5 templos de reliquia: nacao 1 = devir 1..5)")
-		testeMutantes = flag.Bool("teste-mutantes", false, "MODO DE TESTE: mutantes do nivel 60 (Planta Carnivora, Croshu, Buto) sempre deixam um acessorio e ficam com defesa reduzida")
-		testeDefMax   = flag.Uint("teste-def-max", 700, "no modo de teste, teto da defesa fisica e magica desses mutantes")
-		trace         = flag.Bool("trace", false, "registra todo pacote enviado e recebido (volume alto; para achar o pacote que trava o cliente)")
-		multiCanal    = flag.Bool("multicanal", false, "sobe todos os canais do Channels do .ini, cada um no IP do SL.bin (porta 8822); sem esta opcao sobe um canal so, em :8822")
-		slPath        = flag.String("sl", "", "caminho do SL.bin (padrao: ao lado da pasta de dados)")
+		iniPath           = flag.String("ini", "AikaServer.ini", "caminho do AikaServer.ini")
+		dataDir           = flag.String("data", dataDirDefault(), "pasta com as tabelas .bin")
+		logLevel          = flag.String("log", "info", "nivel de log: debug, info, warn, error")
+		skipDB            = flag.Bool("no-db", false, "sobe sem banco (so para conferir a carga)")
+		nation            = flag.Int("nation", 1, "nacao deste servidor (define os 5 templos de reliquia: nacao 1 = devir 1..5)")
+		testeMutantes     = flag.Bool("teste-mutantes", false, "MODO DE TESTE: mutantes do nivel 60 (Planta Carnivora, Croshu, Buto) sempre deixam um acessorio e ficam com defesa reduzida")
+		testeDefMax       = flag.Uint("teste-def-max", 700, "no modo de teste, teto da defesa fisica e magica desses mutantes")
+		trace             = flag.Bool("trace", false, "registra todo pacote enviado e recebido (volume alto; para achar o pacote que trava o cliente)")
+		siegeQualquerHora = flag.Bool("cerco-qualquer-hora", false, "a guerra de castelo pode comecar a qualquer hora (a regra e sabado, 20h)")
+		multiCanal        = flag.Bool("multicanal", false, "sobe todos os canais do Channels do .ini, cada um no IP do SL.bin (porta 8822); sem esta opcao sobe um canal so, em :8822")
+		slPath            = flag.String("sl", "", "caminho do SL.bin (padrao: ao lado da pasta de dados)")
 	)
 	flag.Parse()
 
@@ -84,6 +87,14 @@ func run() error {
 	for _, t := range tables.Loaded {
 		log.Info("tabela carregada", "detalhe", t.String())
 	}
+	questTable, questAvisos, err := questdata.Load(*dataDir)
+	if err != nil {
+		log.Warn("quests indisponiveis", "erro", err)
+	}
+	for _, a := range questAvisos {
+		log.Warn("quests: linha ignorada", "detalhe", a)
+	}
+	log.Info("quests carregadas", "quantas", questTable.Len())
 	titleTable, err := titledata.Load(*dataDir)
 	if err != nil {
 		log.Warn("titulos indisponiveis", "erro", err)
@@ -113,6 +124,8 @@ func run() error {
 		couponDB      game.CouponStore
 		pranDB        game.PranStore
 		titleDB       game.TitleStore
+		questDB       game.QuestStore
+		siegeDB       game.SiegeStore
 		eventDB       game.EventStore
 		gmDB          game.GMStore
 		gmCmds        game.GMCommandStore
@@ -181,6 +194,8 @@ func run() error {
 		couponDB = store.Coupons{DB: db}
 		pranDB = store.Prans{DB: db}
 		titleDB = store.Titles{DB: db}
+		questDB = store.Quests{DB: db}
+		siegeDB = store.Siege{DB: db}
 		eventDB = store.Events{DB: db}
 		gmDB = store.GMAccounts{DB: db}
 		gmCmds = store.GMAccounts{DB: db}
@@ -332,6 +347,12 @@ func run() error {
 			PranDB:         pranDB,
 			PranIDs:        pranpkg.NewIDs(),
 			TitleDB:        titleDB,
+			QuestDB:        questDB,
+			QuestTable:     questTable,
+			QuestList:      tables.Quests,
+			Siege:          &siege.War{},
+			SiegeDB:        siegeDB,
+			SiegeAnyTime:   *siegeQualquerHora,
 			EventDB:        eventDB,
 			GMDB:           gmDB,
 			GMCmds:         gmCmds,
@@ -508,6 +529,9 @@ func run() error {
 		go chestLoop(ctx, h)
 		go saveLoop(ctx, h, log)
 		go buffLoop(ctx, h)
+		go expiryLoop(ctx, h)
+		go siegeLoop(ctx, h)
+		go pranFoodLoop(ctx, h)
 	}
 	// A fila de leilao e do banco, nao do canal: uma vez so.
 	go auctionLoop(ctx, canalHandler, log)
@@ -830,6 +854,56 @@ func saveLoop(ctx context.Context, h *game.Handler, log *slog.Logger) {
 			if n := h.SaveAllTick(); n > 0 {
 				log.Debug("gravacao periodica", "jogadores", n)
 			}
+		}
+	}
+}
+
+// pranFoodInterval e o passo da fome da pran (TPranFoodThread: 200 s).
+const pranFoodInterval = 200 * time.Second
+
+// pranFoodLoop gasta a comida da pran invocada.
+func pranFoodLoop(ctx context.Context, h *game.Handler) {
+	t := time.NewTicker(pranFoodInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			h.PranFoodTick()
+		}
+	}
+}
+
+// siegeLoop confere a guerra de castelo a cada segundo (TCastleSiegeThread
+// dormia 1000 ms entre passadas).
+func siegeLoop(ctx context.Context, h *game.Handler) {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			h.SiegeTick()
+		}
+	}
+}
+
+// expiryInterval e o passo da conferencia de itens com prazo. A origem usava
+// uma thread propria (TTimeItensThread).
+const expiryInterval = 30 * time.Second
+
+// expiryLoop apaga ou marca os itens que venceram.
+func expiryLoop(ctx context.Context, h *game.Handler) {
+	t := time.NewTicker(expiryInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			h.ExpireItemsTick()
 		}
 	}
 }

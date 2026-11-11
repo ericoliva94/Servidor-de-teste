@@ -73,6 +73,9 @@ type Attacker struct {
 	Critical uint16 // CurrentScore.Critical
 	DuploAtk uint16 // PlayerCharacter.DuploAtk
 	Acerto   uint16 // CurrentScore.Acerto
+	// ForceCrit e o BuffExistsByID(6347) de GetDamageType3: todo golpe que nao
+	// errou sai critico. So Roll3 le este campo.
+	ForceCrit bool
 }
 
 // Defender reune os atributos do alvo.
@@ -83,6 +86,9 @@ type Defender struct {
 	CritRes  uint16 // GetMobAbility(EF_RESISTANCE6) + PlayerCharacter.CritRes
 	DuploRes uint16 // GetMobAbility(EF_RESISTANCE7) + PlayerCharacter.DuploRes
 	Esquiva  uint16 // CurrentScore.Esquiva
+	// IsPlayer diz se o alvo e jogador. So Roll3 le: contra mob o acerto
+	// ganha 20..39 e o atacante com Critico >= 100 critica de vez em quando.
+	IsPlayer bool
 }
 
 // slotCount e o tamanho da roleta de sorteio (RamdomArray[0..999]).
@@ -97,8 +103,11 @@ const maxRoll = 998
 // posicoes onde cada chance pinta as primeiras posicoes ainda vazias com o seu
 // tipo, e o resultado e a posicao sorteada.
 type Roller struct {
-	slots [slotCount]DamageType
-	total int
+	// missCount e o TBaseMob.MissCount de GetDamageType3: depois de dois erros
+	// seguidos o terceiro golpe nao pode errar.
+	missCount uint16
+	slots     [slotCount]DamageType
+	total     int
 }
 
 // reset limpa a roleta.

@@ -38,10 +38,10 @@ func activePran(s *Session) (int, bool) {
 //	nivel 20..48 adolescente: ate o nivel 49
 //	nivel 49     precisa evoluir se for adolescente (63/73/83)
 //	nivel 50..69 adulta: sem teto
-func (h *Handler) awardPranExp(c *netsrv.Conn, s *Session, exp int64) {
+func (h *Handler) awardPranExp(c *netsrv.Conn, s *Session, exp int64) int64 {
 	slot, ok := activePran(s)
 	if !ok || exp <= 0 {
-		return
+		return 0
 	}
 	p := s.Prans[slot]
 	gain := uint32(min(exp/3, 0xFFFFFFFF))
@@ -56,7 +56,7 @@ func (h *Handler) awardPranExp(c *netsrv.Conn, s *Session, exp int64) {
 	case p.Level == 4, p.Level == 19, p.Level == 49:
 		if p.ClassNeedsEvolution() {
 			h.message(c, "A sua pran precisa evoluir para ganhar exp.")
-			return
+			return 0
 		}
 	case p.Level >= 5 && p.Level <= 18:
 		f = &fase{20, 19, 18}
@@ -65,7 +65,7 @@ func (h *Handler) awardPranExp(c *netsrv.Conn, s *Session, exp int64) {
 	}
 	if f == nil {
 		h.addPranExp(c, s, slot, gain)
-		return
+		return int64(gain)
 	}
 	teto, ok1 := h.pranExpAt(f.fecha)
 	ant, ok2 := h.pranExpAt(f.anterior)
@@ -74,9 +74,10 @@ func (h *Handler) awardPranExp(c *netsrv.Conn, s *Session, exp int64) {
 		for i := int(p.Level); i <= f.ultimo; i++ {
 			h.addPranLevel(c, s, slot)
 		}
-		return
+		return int64(gain)
 	}
 	h.addPranExp(c, s, slot, gain)
+	return int64(gain)
 }
 
 // addPranExp e o porte de TPlayer.AddPranExp: soma, sobe de nivel enquanto a

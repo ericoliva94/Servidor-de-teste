@@ -144,3 +144,30 @@ CREATE TABLE IF NOT EXISTS auction_offers (
 -- O inventario premium usa a mesma tabela items, com slot_type 10 e owner_id
 -- igual ao id da CONTA. O que cada slot guarda e o indice do catalogo premium
 -- (PI.bin), nao o de um item.
+
+-- Quests do personagem (TPlayer.PlayerQuests). Uma linha por quest aceita;
+-- req1..req5 sao o progresso de cada requisito.
+CREATE TABLE IF NOT EXISTS quests (
+  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  charid      INT UNSIGNED NOT NULL,
+  questid     INT UNSIGNED NOT NULL,
+  req1        TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  req2        TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  req3        TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  req4        TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  req5        TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  isdone      TINYINT(1) NOT NULL DEFAULT 0,
+  updated_at  BIGINT NOT NULL DEFAULT 0,
+  created_at  BIGINT NOT NULL DEFAULT 0,
+  UNIQUE KEY uq_quest (charid, questid)
+);
+
+-- Cadastro do cerco de castelo (TNationCerco). side 0 = defesa, 1 a 4 = os
+-- atacantes; role 0 = marechal, 1 = estrategista, 2 = juiz, 3 = tesoureiro.
+CREATE TABLE IF NOT EXISTS nation_siege (
+  nation_id  TINYINT UNSIGNED NOT NULL,
+  side       TINYINT UNSIGNED NOT NULL,
+  role       TINYINT UNSIGNED NOT NULL,
+  guild_name VARCHAR(32) NOT NULL,
+  PRIMARY KEY (nation_id, side, role)
+);

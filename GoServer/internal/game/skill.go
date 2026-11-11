@@ -93,6 +93,8 @@ func (h *Handler) learnSkill(ctx context.Context, c *netsrv.Conn, s *Session, p 
 	s.Avatar.SkillPoint = subPoints(s.Avatar.SkillPoint, int(d.SkillPoints))
 	s.Avatar.Gold = subGold(s.Avatar.Gold, int64(d.LearnCosts))
 
+	h.refreshPassives(s)
+	h.recalcAfterPran(s)
 	h.sendSkillList(c, s)
 	h.sendRefreshPoint(c, s)
 	h.log().Info("skill aprendida",
@@ -141,6 +143,8 @@ func (h *Handler) resetSkills(ctx context.Context, c *netsrv.Conn, s *Session, p
 	}
 	s.Avatar.SkillPoint = addPoints(s.Avatar.SkillPoint, devolvidos)
 	s.Base.Cooldowns.Clear()
+	h.refreshPassives(s)
+	h.recalcAfterPran(s)
 
 	h.sendSkillList(c, s)
 	h.sendRefreshPoint(c, s)
@@ -339,18 +343,20 @@ func (h *Handler) skillSingleTarget(c *netsrv.Conn, s *Session, pkt packets.Send
 // comum do alvo unico e da area.
 func (h *Handler) skillHitPlayer(s, alvo *Session, skill uint32, d *gamedata.T_SkillData) {
 	rnd := h.rand()
-	tipo := s.Roller.Roll(
+	tipo := s.Roller.Roll3(
 		combat.Attacker{
-			Critical: s.Avatar.Critical,
-			DuploAtk: s.Avatar.DuploAtk,
-			Acerto:   uint16(s.Avatar.Acerto),
+			Critical:  s.Avatar.Critical,
+			DuploAtk:  s.Avatar.DuploAtk,
+			Acerto:    uint16(s.Avatar.Acerto),
+			ForceCrit: s.Base.Buffs != nil && s.Base.Buffs.Has(buffAlwaysCrit),
 		},
 		combat.Defender{
 			CritRes:  alvo.Avatar.CritRes,
 			DuploRes: alvo.Avatar.DuploRes,
 			Esquiva:  uint16(alvo.Avatar.Esquiva),
+			IsPlayer: true,
 		},
-		true, skill, rnd)
+		skill, rnd)
 
 	dano := 0
 	if tipo != combat.Miss {
@@ -432,18 +438,20 @@ func (h *Handler) skillOnMob(c *netsrv.Conn, s *Session, mobID uint16, d *gameda
 // alvo unico e da area.
 func (h *Handler) skillHitMob(c *netsrv.Conn, s *Session, m *Mob, sp *mobdata.Species, d *gamedata.T_SkillData) {
 	rnd := h.rand()
-	tipo := s.Roller.Roll(
+	tipo := s.Roller.Roll3(
 		combat.Attacker{
-			Critical: s.Avatar.Critical,
-			DuploAtk: s.Avatar.DuploAtk,
-			Acerto:   uint16(s.Avatar.Acerto),
+			Critical:  s.Avatar.Critical,
+			DuploAtk:  s.Avatar.DuploAtk,
+			Acerto:    uint16(s.Avatar.Acerto),
+			ForceCrit: s.Base.Buffs != nil && s.Base.Buffs.Has(buffAlwaysCrit),
 		},
 		combat.Defender{
 			CritRes:  h.MobCritRes,
 			DuploRes: h.MobDuploRes,
 			Esquiva:  h.MobEsquiva,
+			IsPlayer: false,
 		},
-		true, uint32(d.Index), rnd)
+		uint32(d.Index), rnd)
 
 	dano := 0
 	if tipo != combat.Miss {

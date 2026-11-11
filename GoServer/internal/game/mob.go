@@ -51,6 +51,10 @@ type Mob struct {
 	AttackerID      uint16
 	FirstAttackerID uint16
 	Attacked        bool
+
+	// Temp marca o mob criado pelo painel de GM (isTemp na origem): nao tem
+	// ponto de spawn, nao volta ao morrer e sai do mundo.
+	Temp bool
 }
 
 // MobWorld guarda os mobs vivos de um canal.
@@ -209,8 +213,12 @@ func (w *MobWorld) Respawn(agora time.Time) []*Mob {
 	defer w.mu.Unlock()
 
 	var voltaram []*Mob
-	for _, m := range w.mobs {
+	for id, m := range w.mobs {
 		if !m.Dead || m.DeadAt.IsZero() {
+			continue
+		}
+		if m.Temp {
+			delete(w.mobs, id) // o mob do painel nao reaparece
 			continue
 		}
 		sp := w.speciesLocked(m)

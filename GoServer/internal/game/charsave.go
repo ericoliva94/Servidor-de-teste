@@ -49,6 +49,26 @@ func (h *Handler) saveCharacter(s *Session) {
 	}
 }
 
+// pushUnreadMail porta o TEntityMail.SendUnreadMails que as threads da origem
+// chamavam junto de cada gravacao periodica: reenvia o $3F1B com o numero de
+// cartas nao lidas, para a janela avisar quem recebeu carta com o jogo aberto.
+func (h *Handler) pushUnreadMail(s *Session) {
+	if h.MailDB == nil || s.CharID() == 0 {
+		return
+	}
+	c := h.connOf(s)
+	if c == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), saveTimeout)
+	defer cancel()
+	caixa, err := h.MailDB.Box(ctx, s.CharID())
+	if err != nil || caixa == nil {
+		return
+	}
+	h.sendMailUnread(c, s, caixa.Unread())
+}
+
 // SaveAllTick grava o estado de todo jogador em jogo e devolve quantos foram
 // gravados. E o complemento do ponto unico de saida (OnDisconnect): sem ele, uma
 // queda do processo perdia tudo que a sessao tinha mudado desde o login.
@@ -77,7 +97,9 @@ func (h *Handler) SaveAllTick() int {
 		h.saveItemBar(s)
 		h.savePrans(s)
 		h.saveTitles(s)
+		h.saveQuests(s)
 		tradeMu.Unlock()
+		h.pushUnreadMail(s)
 		n++
 	}
 	return n

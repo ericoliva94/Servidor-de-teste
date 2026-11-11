@@ -8,6 +8,7 @@ import (
 // Indices EF_RELIQUE_* de GlobalDefs.pas.
 const (
 	efRelicPerHP    = 146
+	efRelicPerExp   = 147
 	efRelicPerMP    = 148
 	efRelicPerDmg1  = 149
 	efRelicPerDmg2  = 150
@@ -26,6 +27,8 @@ type RelicEffects struct {
 	Critical, Hit, Parry           int
 	StateRes, Cooltime, RunSpeed   int
 	Double                         int
+	// PerExp e o EF_RELIQUE_PER_EXP: percentual de exp de mob a mais.
+	PerExp int
 }
 
 // relicEffectsFor monta os efeitos para um jogador de certa nacao.
@@ -44,6 +47,7 @@ func relicEffectsFor(reg *devir.Registry, nation uint16) RelicEffects {
 		return fx
 	}
 	fx.PerHP = reg.EffectValue(efRelicPerHP)
+	fx.PerExp = reg.EffectValue(efRelicPerExp)
 	// A origem somava o MP com o efeito de HP (EF_RELIQUE_PER_HP): erro de
 	// digitacao. Aqui vale o efeito de MP, como o proprio stats.MaxMP previa.
 	fx.PerMP = reg.EffectValue(efRelicPerMP)

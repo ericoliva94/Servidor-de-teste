@@ -710,18 +710,20 @@ func (h *Handler) attackDungeonMob(ctx context.Context, c *netsrv.Conn,
 	}
 
 	rnd := h.rand()
-	tipo := s.Roller.Roll(
+	tipo := s.Roller.Roll3(
 		combat.Attacker{
-			Critical: s.Avatar.Critical,
-			DuploAtk: s.Avatar.DuploAtk,
-			Acerto:   uint16(s.Avatar.Acerto),
+			Critical:  s.Avatar.Critical,
+			DuploAtk:  s.Avatar.DuploAtk,
+			Acerto:    uint16(s.Avatar.Acerto),
+			ForceCrit: s.Base.Buffs != nil && s.Base.Buffs.Has(buffAlwaysCrit),
 		},
 		combat.Defender{
 			CritRes:  h.MobCritRes,
 			DuploRes: h.MobDuploRes,
 			Esquiva:  h.MobEsquiva,
+			IsPlayer: false,
 		},
-		true, 0, rnd)
+		0, rnd)
 
 	dano := 0
 	if tipo != combat.Miss {

@@ -133,3 +133,98 @@ func TestGuildaDesfeitaSaiDaAlianca(t *testing.T) {
 		t.Errorf("a Gama deveria ficar sozinha: %+v", c.Ally)
 	}
 }
+
+func aliancaDeTres(t *testing.T) (*Registry, *Guild, *Guild, *Guild) {
+	t.Helper()
+	r := NewRegistry()
+	a := novaGuildaDeTeste(t, r, "Alfa", 1, 1)
+	b := novaGuildaDeTeste(t, r, "Beta", 1, 2)
+	c := novaGuildaDeTeste(t, r, "Gama", 1, 3)
+	if _, err := r.JoinAlliance(a, b); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.JoinAlliance(a, c); err != nil {
+		t.Fatal(err)
+	}
+	return r, a, b, c
+}
+
+func TestDesfazerAlianca(t *testing.T) {
+	r, a, b, c := aliancaDeTres(t)
+	if _, err := r.DisbandAlliance(b); !errors.Is(err, ErrNotAllyLeader) {
+		t.Errorf("aliada desfazendo: %v", err)
+	}
+	mudou, err := r.DisbandAlliance(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mudou) != 3 {
+		t.Errorf("alteradas = %d, queria 3", len(mudou))
+	}
+	for _, g := range []*Guild{a, b, c} {
+		if g.InAlliance() || g.AllyCount() != 1 || g.Ally.Leader != g.Index {
+			t.Errorf("%s deveria estar sozinha: %+v", g.Name, g.Ally)
+		}
+	}
+	if _, err := r.DisbandAlliance(a); !errors.Is(err, ErrNotAllied) {
+		t.Errorf("desfazer sem aliança: %v", err)
+	}
+}
+
+func TestRetirarAliadaDeixaAsOutrasComListaNova(t *testing.T) {
+	r, a, b, c := aliancaDeTres(t)
+	tirada, mudou, err := r.KickAlly(a, 1) // slot 1 = Beta
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tirada != b || b.InAlliance() {
+		t.Error("Beta deveria sair e ficar sozinha")
+	}
+	if len(mudou) != 3 {
+		t.Errorf("alteradas = %d, queria 3 (lider, retirada, restante)", len(mudou))
+	}
+	if a.AllyCount() != 2 || c.Ally != a.Ally {
+		t.Errorf("a lista nova deveria ir para Gama: %+v / %+v", a.Ally, c.Ally)
+	}
+	for _, it := range c.Ally.Guilds {
+		if it.Index == b.Index {
+			t.Error("Gama ainda lista Beta")
+		}
+	}
+	if _, _, err := r.KickAlly(a, 1); !errors.Is(err, ErrAllySlot) {
+		t.Errorf("slot vazio: %v", err)
+	}
+	if _, _, err := r.KickAlly(a, 0); !errors.Is(err, ErrAllySlot) {
+		t.Errorf("slot 0 (a lider): %v", err)
+	}
+	if _, _, err := r.KickAlly(c, 1); !errors.Is(err, ErrNotAllyLeader) {
+		t.Errorf("aliada retirando: %v", err)
+	}
+}
+
+func TestSairDaAlianca(t *testing.T) {
+	r, a, b, c := aliancaDeTres(t)
+	if _, err := r.LeaveAlliance(a); !errors.Is(err, ErrIsAllyLeader) {
+		t.Errorf("lider saindo: %v", err)
+	}
+	mudou, err := r.LeaveAlliance(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mudou) != 3 || b.InAlliance() {
+		t.Errorf("alteradas = %d, Beta sozinha = %v", len(mudou), !b.InAlliance())
+	}
+	for _, g := range []*Guild{a, c} {
+		for _, it := range g.Ally.Guilds {
+			if it.Index == b.Index {
+				t.Errorf("%s ainda lista Beta", g.Name)
+			}
+		}
+	}
+	if a.AllyCount() != 2 {
+		t.Errorf("a aliança deveria ter 2 guildas, tem %d", a.AllyCount())
+	}
+	if _, err := r.LeaveAlliance(b); !errors.Is(err, ErrNotAllied) {
+		t.Errorf("sair sem estar: %v", err)
+	}
+}

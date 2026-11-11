@@ -340,13 +340,16 @@ func (h *Handler) collectMapItem(ctx context.Context, c *netsrv.Conn, s *Session
 	if s.Status < Playing {
 		return ErrNotPlaying
 	}
-	if h.MapObjs == nil {
-		return nil
-	}
-
 	var pkt packets.CollectItem
 	if err := netsrv.Unmarshal(p, &pkt); err != nil {
 		return err
+	}
+	// Orbes e bandeira do castelo (3370 a 3373) nao sao objetos do mapa.
+	if h.castleCollect(c, s, pkt.Index) {
+		return nil
+	}
+	if h.MapObjs == nil {
+		return nil
 	}
 	if pkt.Index == 0 || pkt.Index > MaxMapObjects {
 		return nil
